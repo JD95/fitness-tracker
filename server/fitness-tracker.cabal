@@ -4,7 +4,7 @@ cabal-version: 1.12
 --
 -- see: https://github.com/sol/hpack
 --
--- hash: 09da03f20cb8ea81724c9c2db9acd629fcb927ecd6fe29ebed102ea4f138b657
+-- hash: 981637ad7389d8c641f57584bf94c689b63f184a37810178a618145aa9e7f5cc
 
 name:           fitness-tracker
 version:        0.1.0.0
@@ -34,9 +34,11 @@ library
       src
   build-depends:
       base >=4.7 && <5
+    , postgresql-simple
+    , time
   default-language: Haskell2010
 
-executable fitness-tracker-exe
+executable fitness-tracker
   main-is: Main.hs
   other-modules:
       Paths_fitness_tracker
@@ -46,6 +48,8 @@ executable fitness-tracker-exe
   build-depends:
       base >=4.7 && <5
     , fitness-tracker
+    , postgresql-simple
+    , time
   default-language: Haskell2010
 
 test-suite fitness-tracker-test
@@ -59,4 +63,6 @@ test-suite fitness-tracker-test
   build-depends:
       base >=4.7 && <5
     , fitness-tracker
+    , postgresql-simple
+    , time
   default-language: Haskell2010
