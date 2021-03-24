@@ -23,6 +23,11 @@ dependencies:
 - base >= 4.7 && < 5
 - postgresql-simple
 - time
+- servant
+- servant-server
+- aeson
+- wai
+- warp
 
 library:
   source-dirs: src
