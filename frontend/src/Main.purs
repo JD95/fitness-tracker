@@ -2,6 +2,10 @@ module Main where
 
 import Prelude
 
+import Data.List as List
+import Data.Formatter.DateTime
+import Data.JSDate as JSDate
+import Data.Array
 import Data.Unit
 import Data.Maybe
 import Data.Either
@@ -62,17 +66,21 @@ component =
   render :: State -> H.ComponentHTML Action () m
   render Empty = HH.text "No data yet"
   render (Full state) = HH.div_ (map renderSet state) where
-    renderSet (WorkoutSet ws) = HH.div_ [HH.text $ ws.name]
+    renderSet (WorkoutSet ws) = HH.div_ [HH.text txt] where
+      txt = ws.name <> " " <> show ws.reps <> " " <> dateTxt <> " " <> show ws.weight where
+        dateTxt = case unformat dateReadFormat ws.date of
+          Right t -> format dateWriteFormat t
+          Left _ -> "Format failed " <> ws.date
   render (Error e) = HH.text e
 
   handleAction :: Action -> H.HalogenM State Action () output m Unit
   handleAction = case _ of
     Init -> do
-      response <- H.liftAff $ AX.request $ AX.defaultRequest {
-            url = "/sets",
-            method = Left GET,
-            responseFormat = AXRF.string
-            }
+      response <- H.liftAff $ AX.request $ AX.defaultRequest
+        { url = "/sets"
+        , method = Left GET
+        , responseFormat = AXRF.string
+        }
       let result = case response of
             Right r -> case jsonParser r.body of
               Right json -> case decodeJson json of
@@ -81,3 +89,26 @@ component =
               Left _ -> Error "Problem parsing json"
             Left _ -> Error "Problem making request" 
       H.modify_ $ const result 
+
+dateReadFormat = List.fromFoldable
+  [ YearFull
+  , Placeholder "-"
+  , MonthTwoDigits
+  , Placeholder "-"
+  , DayOfMonthTwoDigits
+  , Placeholder "T"
+  , Hours24
+  , Placeholder ":"
+  , MinutesTwoDigits
+  , Placeholder ":"
+  , SecondsTwoDigits
+  , Placeholder "Z"
+  ]
+
+dateWriteFormat = List.fromFoldable
+  [ DayOfMonthTwoDigits
+  , Placeholder "-"
+  , MonthTwoDigits
+  , Placeholder "-"
+  , YearFull
+  ]
