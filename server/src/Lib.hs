@@ -26,15 +26,20 @@ import qualified Queries as Q
 import Servant
 import WorkoutSet
 
-type API = "sets" :> Get '[JSON] [WorkoutSet]
+type API =
+  ("sets" :> Get '[JSON] [WorkoutSet])
+    :<|> Raw
 
 data Env = Env {db :: Connection}
 
 server :: Env -> Server API
-server (Env db) = do
-  sets <- liftIO $ Q.allWorkoutSets db
-  pure . catMaybes $ validate <$> sets
+server (Env db) = sets :<|> static
   where
+    static = serveDirectoryWebApp "../frontend"
+    sets = do
+      sets <- liftIO $ Q.allWorkoutSets db
+      pure . catMaybes $ validate <$> sets
+
     validate (_, _, NegInfinity, _) = Nothing
     validate (_, _, PosInfinity, _) = Nothing
     validate (a, b, Finite c, d) = Just $ MkWorkoutSet a b (UTCTime c 0) d
