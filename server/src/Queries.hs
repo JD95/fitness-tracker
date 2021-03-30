@@ -6,6 +6,14 @@ import Database.PostgreSQL.Simple
 import Database.PostgreSQL.Simple.SqlQQ
 import Database.PostgreSQL.Simple.Time
 
+allWorkouts :: Connection -> IO [Only String]
+allWorkouts conn =
+  query_
+    conn
+    [sql|
+        select * from workout
+    |]
+
 allWorkoutSets :: Connection -> IO [(String, Int, Date, Int)]
 allWorkoutSets conn =
   query_

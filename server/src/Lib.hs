@@ -27,18 +27,22 @@ import Servant
 import WorkoutSet
 
 type API =
-  ("sets" :> Get '[JSON] [WorkoutSet])
+  ("workouts" :> Get '[JSON] [String])
+    :<|> ("sets" :> Get '[JSON] [WorkoutSet])
     :<|> Raw
 
 data Env = Env {db :: Connection}
 
 server :: Env -> Server API
-server (Env db) = sets :<|> static
+server (Env db) = workouts :<|> sets :<|> static
   where
     static = serveDirectoryWebApp "../frontend"
+
     sets = do
       sets <- liftIO $ Q.allWorkoutSets db
       pure . catMaybes $ validate <$> sets
+
+    workouts = liftIO $ fmap fromOnly <$> Q.allWorkouts db
 
     validate (_, _, NegInfinity, _) = Nothing
     validate (_, _, PosInfinity, _) = Nothing

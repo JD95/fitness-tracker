@@ -1,13 +1,13 @@
-.column-4 {
-    column-count: 4;
-    column-width: length;
+.col {
 }
 
 .content {
     width: 80%;
     margin: auto;
+    display: flex;
     border: 3px solid green;
 }
+
 
 table, th, td {
     border: 1px solid black;
