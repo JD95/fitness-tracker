@@ -1,26 +1,22 @@
 module Main where
 
-import Prelude
+import Prelude (Unit, bind, const, map, pure, show, unit, ($), (<>))
 
+import Data.List (List)
 import Data.List as List
-import Data.Formatter.DateTime
-import Data.JSDate as JSDate
-import Data.Array
-import Data.Unit
-import Data.Maybe
-import Data.Either
+import Data.Formatter.DateTime (FormatterCommand(..), format, unformat)
+import Data.Maybe (Maybe(..))
+import Data.Either (Either(..))
 import Affjax as AX
 import Affjax.ResponseFormat as AXRF
-import Affjax.RequestHeader
 import Effect (Effect)
 import Effect.Aff.Class (class MonadAff)
 import Halogen as H
 import Halogen.Aff as HA
-import Halogen.HTML as HH
-import Halogen.HTML.Events as HE
+import Halogen.HTML (text, table_, tr_, th_) as HH
 import Data.HTTP.Method (Method(..))
 import Halogen.VDom.Driver (runUI)
-import Data.Argonaut
+import Data.Argonaut (class DecodeJson, decodeJson, jsonParser, (.:))
 
 main :: Effect Unit
 main = HA.runHalogenAff do
@@ -65,12 +61,17 @@ component =
 
   render :: State -> H.ComponentHTML Action () m
   render Empty = HH.text "No data yet"
-  render (Full state) = HH.div_ (map renderSet state) where
-    renderSet (WorkoutSet ws) = HH.div_ [HH.text txt] where
-      txt = ws.name <> " " <> show ws.reps <> " " <> dateTxt <> " " <> show ws.weight where
-        dateTxt = case unformat dateReadFormat ws.date of
-          Right t -> format dateWriteFormat t
-          Left _ -> "Format failed " <> ws.date
+  render (Full state) = HH.table_ (map renderSet state) where
+    renderSet (WorkoutSet ws) = HH.tr_
+      [ HH.th_ [ HH.text dateTxt ]
+      , HH.th_ [ HH.text ws.name ]
+      , HH.th_ [ HH.text $ show ws.reps ]
+      , HH.th_ [ HH.text $ show ws.weight ]
+      ]
+      where
+      dateTxt = case unformat dateReadFormat ws.date of
+        Right t -> format dateWriteFormat t
+        Left _ -> "Format failed " <> ws.date
   render (Error e) = HH.text e
 
   handleAction :: Action -> H.HalogenM State Action () output m Unit
@@ -90,6 +91,7 @@ component =
             Left _ -> Error "Problem making request" 
       H.modify_ $ const result 
 
+dateReadFormat :: List FormatterCommand
 dateReadFormat = List.fromFoldable
   [ YearFull
   , Placeholder "-"
@@ -105,6 +107,7 @@ dateReadFormat = List.fromFoldable
   , Placeholder "Z"
   ]
 
+dateWriteFormat :: List FormatterCommand
 dateWriteFormat = List.fromFoldable
   [ DayOfMonthTwoDigits
   , Placeholder "-"
