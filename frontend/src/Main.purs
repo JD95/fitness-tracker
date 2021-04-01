@@ -2,6 +2,7 @@ module Main where
 
 import Prelude (Unit, Void, bind, const, map, pure, show, unit, ($), (<>), (<$>))
 
+import Data.Natural
 import Data.Argonaut (class DecodeJson, decodeJson, (.:))
 import Data.Either (Either(..), either)
 import Data.Formatter.DateTime (FormatterCommand(..), format, unformat)
@@ -12,11 +13,12 @@ import Effect (Effect)
 import Effect.Aff.Class (class MonadAff)
 import Halogen as H
 import Halogen.Aff as HA
-import Halogen.HTML (slot_, div_, div, text, select_, option_, table_, tr_, th_) as HH
+import Halogen.HTML (p_, slot_, div_, div, text, select_, option_, table_, tr_, th_) as HH
 import Halogen.HTML.Properties (class_) as HH
 import Halogen.VDom.Driver (runUI)
 import Web.HTML.Common (ClassName(..))
 
+import InputField as InputField 
 import WorkoutSelector as WorkoutSelector
 import Utils (getJson)
 
@@ -45,7 +47,10 @@ data Action = Init
 
 newtype Info = Info {sets :: Array WorkoutSet, workouts :: Array String}
 
-type Slots = (workoutSelector :: forall q. H.Slot q Void Unit)
+type Slots =
+  ( workoutSelector :: forall q. H.Slot q Void Unit
+  , natField :: H.Slot (InputField.Query Natural) Void Int
+  )
 
 data State
   = Empty
@@ -70,7 +75,18 @@ component =
   render Empty = HH.text "No data yet"
   render (Full (Info state)) = HH.div [ HH.class_ (ClassName "content") ]
     [ HH.div_
-      [ HH.slot_ WorkoutSelector.proxy unit WorkoutSelector.comp unit 
+      [ HH.p_
+        [ HH.text "Workout: "
+        , HH.slot_ WorkoutSelector.proxy unit WorkoutSelector.comp unit
+        ]
+      , HH.p_
+        [ HH.text "Weight: "
+        , HH.slot_ InputField.natProxy 0 InputField.nat unit
+        ]
+      , HH.p_
+        [ HH.text "Reps: "
+        , HH.slot_ InputField.natProxy 1 InputField.nat unit
+        ]
       , HH.table_ (renderSet <$> state.sets)
       ]
     ]

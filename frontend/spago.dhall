@@ -11,6 +11,7 @@ You can edit this file as you like.
   , "formatters"
   , "halogen"
   , "js-date"
+  , "naturals"
   , "psci-support"
   ]
 , packages = ./packages.dhall
