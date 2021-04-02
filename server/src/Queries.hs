@@ -5,6 +5,17 @@ module Queries where
 import Database.PostgreSQL.Simple
 import Database.PostgreSQL.Simple.SqlQQ
 import Database.PostgreSQL.Simple.Time
+import GHC.Int (Int64)
+
+insertSet :: Connection -> String -> Int -> Date -> Int -> IO Int64
+insertSet conn setName setReps setDate setWeight = do
+  execute
+    conn
+    [sql|
+        insert into workout_set (name, reps, date_of, weight)
+        values (?,?,?,?);
+    |]
+    (setName, setReps, setDate, setWeight)
 
 allWorkouts :: Connection -> IO [Only String]
 allWorkouts conn =

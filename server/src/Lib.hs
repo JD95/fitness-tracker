@@ -29,18 +29,22 @@ import WorkoutSet
 type API =
   ("workouts" :> Get '[JSON] [String])
     :<|> ("sets" :> Get '[JSON] [WorkoutSet])
+    :<|> ("sets" :> ReqBody '[JSON] WorkoutSet :> Post '[JSON] ())
     :<|> Raw
 
 data Env = Env {db :: Connection}
 
 server :: Env -> Server API
-server (Env db) = workouts :<|> sets :<|> static
+server (Env db) = workouts :<|> getSets :<|> postSets :<|> static
   where
     static = serveDirectoryWebApp "../frontend"
 
-    sets = do
+    getSets = do
       sets <- liftIO $ Q.allWorkoutSets db
       pure . catMaybes $ validate <$> sets
+
+    postSets (MkWorkoutSet workout reps (UTCTime date _) weight) = do
+      liftIO $ void $ Q.insertSet db workout reps (Finite date) weight
 
     workouts = liftIO $ fmap fromOnly <$> Q.allWorkouts db
 

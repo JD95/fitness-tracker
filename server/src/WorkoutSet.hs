@@ -15,3 +15,5 @@ data WorkoutSet = MkWorkoutSet
   deriving (Show, Generic)
 
 instance ToJSON WorkoutSet
+
+instance FromJSON WorkoutSet
