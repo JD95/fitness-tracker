@@ -13,6 +13,7 @@ You can edit this file as you like.
   , "js-date"
   , "naturals"
   , "psci-support"
+  , "transformers"
   ]
 , packages = ./packages.dhall
 , sources = [ "src/**/*.purs", "test/**/*.purs" ]

@@ -1,6 +1,6 @@
-module InputField (Query, natProxy, nat, intProxy, int, comp) where
+module InputField (Query(..), natProxy, nat, intProxy, int, comp) where
 
-import Prelude (Unit, bind, pure, ($), (>))
+import Prelude (Unit, bind, pure, ($), (>=))
 
 import Data.Int as Int
 import Data.Natural (Natural) 
@@ -24,7 +24,7 @@ type State a =
   }
 
 data Query val a
-  = Request (Maybe val -> a)
+  = GetValue (Maybe val -> a)
 
 type Slots :: forall k. Row k 
 type Slots = ()
@@ -35,7 +35,7 @@ natProxy = Proxy
 nat :: forall input output m. MonadAff m => H.Component (Query Natural) input output m
 nat = comp $ \txt ->
   case Int.fromString txt of
-    Just x -> if x > 0
+    Just x -> if x >= 0
       then Right (Nat.intToNat x)
       else Left "Must be positive"
     Nothing -> Left "Must enter a number"
@@ -89,7 +89,7 @@ comp f =
 
   handleQuery :: forall x. Query a x -> H.HalogenM (State a) Action Slots output m (Maybe x)
   handleQuery = case _ of
-    Request reply -> do
+    GetValue reply -> do
       st <- H.get
       pure $ Just $ reply $ case st.value of
         Just (Right x) -> Just x

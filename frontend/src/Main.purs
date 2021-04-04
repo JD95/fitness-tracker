@@ -1,9 +1,12 @@
 module Main where
 
-import Prelude (Unit, Void, bind, const, map, pure, show, unit, ($), (<>), (<$>))
+import Prelude (Unit, Void, discard, bind, join, const, pure, show, unit, ($), (<>), (<$>), (>>=))
 
-import Data.Natural
-import Data.Argonaut (class DecodeJson, decodeJson, (.:))
+import Data.Array(cons)
+import Control.Monad.Trans.Class (lift)
+import Control.Monad.Maybe.Trans
+import Data.Natural (Natural, natToInt)
+import Data.Argonaut (class DecodeJson, class EncodeJson, jsonEmptyObject, decodeJson, (~>), (:=), (.:))
 import Data.Either (Either(..), either)
 import Data.Formatter.DateTime (FormatterCommand(..), format, unformat)
 import Data.List (List)
@@ -13,14 +16,16 @@ import Effect (Effect)
 import Effect.Aff.Class (class MonadAff)
 import Halogen as H
 import Halogen.Aff as HA
-import Halogen.HTML (p_, slot_, div_, div, text, select_, option_, table_, tr_, th_) as HH
+import Halogen.HTML (button, p_, slot_, div_, div, text, table_, tr_, th_) as HH
 import Halogen.HTML.Properties (class_) as HH
+import Halogen.HTML.Events as HE
 import Halogen.VDom.Driver (runUI)
 import Web.HTML.Common (ClassName(..))
+import Effect.Now (nowDateTime)
 
 import InputField as InputField 
 import WorkoutSelector as WorkoutSelector
-import Utils (getJson)
+import Utils (getJson, postJson)
 
 main :: Effect Unit
 main = HA.runHalogenAff do
@@ -43,12 +48,22 @@ instance decodeJsonWorkoutSet :: DecodeJson WorkoutSet where
     weight <- x .: "setWeight"
     pure $ WorkoutSet { name, reps, date, weight }
 
-data Action = Init 
+instance encodeJsonWorkoutSet :: EncodeJson WorkoutSet where
+  encodeJson (WorkoutSet set) = do
+    "setWorkout" := set.name
+    ~> "setReps" := set.reps
+    ~> "setDate" := set.date
+    ~> "setWeight" := set.weight
+    ~> jsonEmptyObject
 
-newtype Info = Info {sets :: Array WorkoutSet, workouts :: Array String}
+data Action
+  = Init
+  | Submit
+
+newtype Info = Info {sets :: Array WorkoutSet}
 
 type Slots =
-  ( workoutSelector :: forall q. H.Slot q Void Unit
+  ( workoutSelector :: H.Slot WorkoutSelector.Query Void Unit
   , natField :: H.Slot (InputField.Query Natural) Void Int
   )
 
@@ -87,13 +102,15 @@ component =
         [ HH.text "Reps: "
         , HH.slot_ InputField.natProxy 1 InputField.nat unit
         ]
+      , HH.p_
+        [ HH.button [HE.onClick (const Submit)]
+          [ HH.text "submit" ]
+        ]
       , HH.table_ (renderSet <$> state.sets)
       ]
     ]
 
     where
-
-    renderWorkoutSelector ws = HH.select_ (map (\w -> HH.option_ [HH.text w]) ws)
 
     renderSet (WorkoutSet ws) = HH.tr_
       [ HH.th_ [ HH.text dateTxt ]
@@ -111,12 +128,23 @@ component =
   handleAction = case _ of
     Init -> do
       verifySets <- getJson "/sets"
-      verifyWorkouts <- getJson "workouts"
       H.modify_ $ const $ either Error Full $ do
         sets <- verifySets
-        workouts <- verifyWorkouts
-        pure $ Info {sets: sets, workouts: workouts}
-
+        pure $ Info {sets: sets }
+    Submit -> do
+      let gather = runMaybeT $ do
+            workout <- MaybeT $ H.request WorkoutSelector.proxy unit WorkoutSelector.GetValue
+            reps <- MaybeT $ join <$> H.request InputField.natProxy 0 InputField.GetValue
+            weight <- MaybeT $ join <$> H.request InputField.natProxy 1 InputField.GetValue
+            date <- format dateReadFormat <$> (lift $ H.liftEffect nowDateTime)
+            pure $ WorkoutSet { name: workout, reps: natToInt reps, date: date, weight: natToInt weight }
+      gather >>= case _ of
+        Just ws -> do
+          postJson ws "/sets"
+          H.modify_ $ \st -> case st of
+            Full (Info ss) -> Full (Info ss {sets = cons ws ss.sets})
+            _ -> st
+        Nothing -> pure unit 
 
 dateReadFormat :: List FormatterCommand
 dateReadFormat = List.fromFoldable

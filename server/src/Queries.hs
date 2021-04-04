@@ -22,7 +22,7 @@ allWorkouts conn =
   query_
     conn
     [sql|
-        select * from workout
+        select * from workout 
     |]
 
 allWorkoutSets :: Connection -> IO [(String, Int, Date, Int)]
@@ -30,7 +30,7 @@ allWorkoutSets conn =
   query_
     conn
     [sql|
-        select * from workout_set
+        select * from workout_set order by date_of desc
     |]
 
 lastWeekVolume :: Connection -> IO [(String, Int)]
