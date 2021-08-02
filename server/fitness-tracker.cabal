@@ -1,10 +1,10 @@
 cabal-version: 1.12
 
--- This file has been generated from package.yaml by hpack version 0.33.0.
+-- This file has been generated from package.yaml by hpack version 0.34.4.
 --
 -- see: https://github.com/sol/hpack
 --
--- hash: 3ea54c238018f4065ce974633f80c572d85ae21e91c4ef2b493424ad89c3d89a
+-- hash: b76301b5eccf9b7b302f32ea2c76684834bc4398df3dfadce23a0e0ed6a19212
 
 name:           fitness-tracker
 version:        0.1.0.0
@@ -29,6 +29,7 @@ library
   exposed-modules:
       Lib
       Queries
+      Workout
       WorkoutSet
   other-modules:
       Paths_fitness_tracker

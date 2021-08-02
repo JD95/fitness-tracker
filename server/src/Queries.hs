@@ -17,12 +17,14 @@ insertSet conn setName setReps setDate setWeight = do
     |]
     (setName, setReps, setDate, setWeight)
 
-allWorkouts :: Connection -> IO [Only String]
+allWorkouts :: Connection -> IO [(String, String, Int, Int)]
 allWorkouts conn =
   query_
     conn
     [sql|
-        select * from workout 
+        select primary_muscles.workout, muscles.name, muscles.min_rep, muscles.max_rep
+        from primary_muscles 
+        join muscles on primary_muscles.muscle = muscles.name
     |]
 
 allWorkoutSets :: Connection -> IO [(String, Int, Date, Int)]

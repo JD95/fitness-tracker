@@ -1,6 +1,6 @@
-module WorkoutSelector (Query(..), proxy, comp) where
+module WorkoutSelector (Query(..), Output(..), Workout(..), proxy, comp) where
 
-import Prelude (Unit, pure, unit, bind, const, map, ($), (>>=))
+import Prelude (Unit, pure, unit, bind, const, map, discard, ($), (>>=), (==))
 
 import Type.Proxy (Proxy(..))
 import Data.Either (Either(..))
@@ -9,7 +9,8 @@ import Effect.Aff.Class (class MonadAff)
 import Halogen as H
 import Halogen.HTML (text, select, option_) as HH
 import Halogen.HTML.Events as HE
-import Data.Array (head)
+import Data.Array (head, filter)
+import Data.Argonaut (class DecodeJson, class EncodeJson, jsonEmptyObject, decodeJson, (~>), (:=), (.:))
 
 import Utils (getJson)
 
@@ -19,16 +20,44 @@ data Action
 
 data State
   = Empty
-  | Full (Array String) String 
+  | Full (Array Workout) Workout 
   | Error String
 
 data Query a
-  = GetValue (String -> a)
+  = GetValue (Workout -> a)
+
+data Output
+  = Selection
+    
+newtype Workout = Workout
+  { name :: String
+  , targetMuscle :: String
+  , repsMin :: Int
+  , repsMax :: Int
+  }
+
+instance decodeJsonWorkout :: DecodeJson Workout where
+  decodeJson json = do
+    x <- decodeJson json
+    name <- x .: "workoutName"
+    targetMuscle <- x .: "workoutTargetMuscle"
+    repsMin <- x .: "workoutRepsMin"
+    repsMax <- x .: "workoutRepsMax"
+    pure $ Workout { name, targetMuscle, repsMin , repsMax}
+
+instance encodeJsonWorkout :: EncodeJson Workout where
+  encodeJson (Workout w) = do
+    "workoutName" := w.name
+    ~> "workoutTargetMuscle" := w.targetMuscle
+    ~> "workoutRepsMin" := w.repsMin
+    ~> "workoutRepsMax" := w.repsMax
+    ~> jsonEmptyObject
+
 
 proxy :: Proxy "workoutSelector"
 proxy = Proxy
 
-comp :: forall input output m. MonadAff m => H.Component Query input output m
+comp :: forall input output m. MonadAff m => H.Component Query input Output m
 comp =
   H.mkComponent
     { initialState
@@ -46,10 +75,11 @@ comp =
 
   render :: State -> H.ComponentHTML Action () m
   render Empty = HH.text "No data yet"
-  render (Full options _) = HH.select [ HE.onValueChange Select] (map (\w -> HH.option_ [HH.text w]) options)
+  render (Full options _) = HH.select [ HE.onValueChange Select]
+                            (map (\(Workout w) -> HH.option_ [HH.text w.name]) options)
   render (Error e) = HH.text e
 
-  handleAction :: Action -> H.HalogenM State Action () output m Unit
+  handleAction :: Action -> H.HalogenM State Action () Output m Unit
   handleAction = case _ of
     Init -> do
       verifyWorkouts <- getJson "workouts"
@@ -61,14 +91,18 @@ comp =
     Select x -> do
       H.modify_ $ case _ of
         Empty -> Empty
-        Full ws _ -> Full ws x
+        Full ws wo -> case head $ filter (\(Workout w) -> w.name == x) ws of
+          Just wo' -> Full ws wo'
+          Nothing -> Full ws wo
         Error e -> Error e
+      -- Notify parent that selection has changed
+      H.raise Selection
 
-  handleQuery :: forall x. Query x -> H.HalogenM State Action () output m (Maybe x)
+  handleQuery :: forall x. Query x -> H.HalogenM State Action () Output m (Maybe x)
   handleQuery = case _ of
       GetValue reply -> do
         H.get >>= case _ of
-          Full _ selected -> pure $ Just $ reply $ selected
+          Full _ selected -> pure $ Just $ reply selected
           _ -> pure Nothing
 
 

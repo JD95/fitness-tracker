@@ -24,10 +24,11 @@ import Network.Wai
 import Network.Wai.Handler.Warp
 import qualified Queries as Q
 import Servant
+import Workout
 import WorkoutSet
 
 type API =
-  ("workouts" :> Get '[JSON] [String])
+  ("workouts" :> Get '[JSON] [Workout])
     :<|> ("sets" :> Get '[JSON] [WorkoutSet])
     :<|> ("sets" :> ReqBody '[JSON] WorkoutSet :> Post '[JSON] ())
     :<|> Raw
@@ -46,7 +47,9 @@ server (Env db) = workouts :<|> getSets :<|> postSets :<|> static
     postSets (MkWorkoutSet workout reps (UTCTime date _) weight) = do
       liftIO $ void $ Q.insertSet db workout reps (Finite date) weight
 
-    workouts = liftIO $ fmap fromOnly <$> Q.allWorkouts db
+    workouts = liftIO $ do
+      ws <- Q.allWorkouts db
+      pure [Workout n t mi ma | (n, t, mi, ma) <- ws]
 
     validate (_, _, NegInfinity, _) = Nothing
     validate (_, _, PosInfinity, _) = Nothing

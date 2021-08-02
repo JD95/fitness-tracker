@@ -17,7 +17,7 @@ import Effect (Effect)
 import Effect.Aff.Class (class MonadAff)
 import Halogen as H
 import Halogen.Aff as HA
-import Halogen.HTML (button, p_, slot_, div_, div, text, table_, tr_, th_) as HH
+import Halogen.HTML (button, p_, slot, slot_, div_, div, text, table_, tr_, th_) as HH
 import Halogen.HTML.Properties (class_) as HH
 import Halogen.HTML.Events as HE
 import Halogen.VDom.Driver (runUI)
@@ -27,6 +27,7 @@ import Data.DateTime as Date
 import Data.Time.Duration as Time 
 
 import InputField as InputField 
+import WorkoutSelector (Workout(..)) 
 import WorkoutSelector as WorkoutSelector
 import Utils (getJson, postJson)
 
@@ -62,11 +63,12 @@ instance encodeJsonWorkoutSet :: EncodeJson WorkoutSet where
 data Action
   = Init
   | Submit
+  | WorkoutSelected WorkoutSelector.Output
 
-newtype Info = Info {sets :: Array WorkoutSet}
+newtype Info = Info {sets :: Array WorkoutSet, selectedWorkout :: Maybe Workout}
 
 type Slots =
-  ( workoutSelector :: H.Slot WorkoutSelector.Query Void Unit
+  ( workoutSelector :: H.Slot WorkoutSelector.Query WorkoutSelector.Output Unit
   , natField :: H.Slot (InputField.Query Natural) Void Int
   )
 
@@ -89,21 +91,30 @@ component =
   initialState :: forall a. a -> State 
   initialState _ = Empty 
 
+  weightSlot = 0
+  repsSlot = 1
+
   render :: State -> H.ComponentHTML Action Slots m
   render Empty = HH.text "No data yet"
   render (Full (Info state)) = HH.div [ HH.class_ (ClassName "content") ]
     [ HH.div_
       [ HH.p_
         [ HH.text "Workout: "
-        , HH.slot_ WorkoutSelector.proxy unit WorkoutSelector.comp unit
+          -- The WorkoutSelector component actually gives output
+          -- so we'll wrap what it gives so this component can handle it
+        , HH.slot WorkoutSelector.proxy unit WorkoutSelector.comp unit WorkoutSelected
         ]
       , HH.p_
         [ HH.text "Weight: "
-        , HH.slot_ InputField.natProxy 0 InputField.nat unit
+        , HH.slot_ InputField.natProxy weightSlot InputField.nat unit
         ]
       , HH.p_
         [ HH.text "Reps: "
-        , HH.slot_ InputField.natProxy 1 InputField.nat unit
+        , HH.slot_ InputField.natProxy repsSlot InputField.nat unit
+        , HH.text $
+          case state.selectedWorkout of
+            Just (Workout w) -> "(" <> show w.repsMin <> "-" <> show w.repsMax <> ")"
+            Nothing -> ""
         ]
       , HH.p_
         [ HH.button [HE.onClick (const Submit)]
@@ -130,22 +141,25 @@ component =
   handleAction :: Action -> H.HalogenM State Action Slots output m Unit
   handleAction = case _ of
     Init -> do
+      workout <- H.request WorkoutSelector.proxy unit WorkoutSelector.GetValue
       verifySets <- getJson "/sets"
       H.modify_ $ const $ either Error Full $ do
         sets <- verifySets
-        pure $ Info {sets: sets }
+        pure $ Info {sets: sets, selectedWorkout: workout}
     Submit -> do
       let gather = runMaybeT $ do
-            workout <- MaybeT $ H.request WorkoutSelector.proxy unit WorkoutSelector.GetValue
-            reps <- MaybeT $ join <$> H.request InputField.natProxy 0 InputField.GetValue
-            weight <- MaybeT $ join <$> H.request InputField.natProxy 1 InputField.GetValue
+            -- There's only one workout selector, so unit
+            Workout workout <- MaybeT $ H.request WorkoutSelector.proxy unit WorkoutSelector.GetValue
+            -- Multiple input fields, so we need slots for them
+            weight <- MaybeT $ join <$> H.request InputField.natProxy weightSlot InputField.GetValue
+            reps <- MaybeT $ join <$> H.request InputField.natProxy repsSlot InputField.GetValue
             date <- format dateReadFormat <$> (MaybeT $ do
                                                  t <- H.liftEffect nowDateTime
                                                  pure $ Date.adjust (Time.negateDuration (Time.Hours 7.0)) t
                                               )
             lift $ H.liftEffect $ log $ show date
             pure $ WorkoutSet
-              { name: workout
+              { name: workout.name
               , reps: natToInt reps
               , date: date
               , weight: natToInt weight
@@ -157,6 +171,13 @@ component =
             Full (Info ss) -> Full (Info ss {sets = cons ws ss.sets})
             _ -> st
         Nothing -> pure unit 
+    WorkoutSelected _ -> do
+      w <- H.request WorkoutSelector.proxy unit WorkoutSelector.GetValue
+      H.modify_ $ \st -> case st of
+        Full (Info i) -> Full $ Info i { selectedWorkout = w }
+        _ -> st
+      
+ 
 
 dateReadFormat :: List FormatterCommand
 dateReadFormat = List.fromFoldable
