@@ -1,9 +1,9 @@
 module Main where
 
-import Prelude (Unit, Void, discard, bind, join, const, pure, show, unit, ($), (<>), (<$>), (>>=))
+import Prelude (Unit, Void, discard, bind, join, const, pure, show, unit, ($), (<>), (<$>), (>>=), (==))
 
 import Effect.Console (log)
-import Data.Array(cons)
+import Data.Array(cons, filter, head)
 import Control.Monad.Trans.Class (lift)
 import Control.Monad.Maybe.Trans
 import Data.Natural (Natural, natToInt)
@@ -96,7 +96,7 @@ component =
 
   render :: State -> H.ComponentHTML Action Slots m
   render Empty = HH.text "No data yet"
-  render (Full (Info state)) = HH.div [ HH.class_ (ClassName "content") ]
+  render (Full state@(Info st)) = HH.div [ HH.class_ (ClassName "content") ]
     [ HH.div_
       [ HH.p_
         [ HH.text "Workout: "
@@ -109,18 +109,20 @@ component =
         , HH.slot_ InputField.natProxy weightSlot InputField.nat unit
         ]
       , HH.p_
+        [ recommendedWeights state
+        ]
+      , HH.p_
         [ HH.text "Reps: "
         , HH.slot_ InputField.natProxy repsSlot InputField.nat unit
-        , HH.text $
-          case state.selectedWorkout of
-            Just (Workout w) -> "(" <> show w.repsMin <> "-" <> show w.repsMax <> ")"
-            Nothing -> ""
+        ]
+      , HH.p_
+        [ recommendedRepRange state 
         ]
       , HH.p_
         [ HH.button [HE.onClick (const Submit)]
           [ HH.text "submit" ]
         ]
-      , HH.table_ (renderSet <$> state.sets)
+      , HH.table_ (renderSet <$> st.sets)
       ]
     ]
 
@@ -177,7 +179,20 @@ component =
         Full (Info i) -> Full $ Info i { selectedWorkout = w }
         _ -> st
       
- 
+recommendedWeights :: forall m. Info -> H.ComponentHTML Action Slots m
+recommendedWeights (Info info) = HH.text $
+  case info.selectedWorkout of
+    Just (Workout w) ->
+      case head $ filter (\(WorkoutSet s) -> s.name == w.name) $ info.sets of
+        (Just (WorkoutSet x)) -> "Weight for Previous Set: " <> show x.weight
+        Nothing -> ""
+    Nothing -> ""
+
+recommendedRepRange :: forall m. Info -> H.ComponentHTML Action Slots m
+recommendedRepRange (Info info) = HH.text $  
+  case info.selectedWorkout of
+    Just (Workout w) -> "Recommended Rep Range: (" <> show w.repsMin <> "-" <> show w.repsMax <> ")"
+    Nothing -> ""
 
 dateReadFormat :: List FormatterCommand
 dateReadFormat = List.fromFoldable
