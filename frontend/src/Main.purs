@@ -1,30 +1,38 @@
 module Main where
 
-import Prelude (Unit, Void, discard, bind, join, const, pure, show, unit, ($), (<>), (<$>), (>>=), (==), (*), (/))
+import Prelude 
 
-import Effect.Console (log)
-import Data.Array(cons, filter, head)
-import Control.Monad.Trans.Class (lift)
 import Control.Monad.Maybe.Trans
-import Data.Natural (Natural, natToInt)
+import Control.Monad.Trans.Class (lift)
 import Data.Argonaut (class DecodeJson, class EncodeJson, jsonEmptyObject, decodeJson, (~>), (:=), (.:))
+import Data.Array (cons, filter, head, takeWhile)
+import Data.DateTime (DateTime, date, weekday)
+import Data.DateTime (adjust) as DateTime
+import Data.DateTime.Instant (instant, toDateTime, unInstant) as Date
 import Data.Either (either)
+import Data.Enum (fromEnum)
+import Data.Formatter.DateTime (format, FormatterCommand(..))
+import Data.Int (toNumber)
+import Data.List (List)
+import Data.List as List
 import Data.Maybe (Maybe(..))
+import Data.Natural (Natural, natToInt)
+import Data.Time.Duration (Days(..))
+import Data.Time.Duration as Time
 import Effect (Effect)
 import Effect.Aff.Class (class MonadAff)
+import Effect.Console (log)
+import Effect.Now (now, nowDateTime)
 import Halogen as H
 import Halogen.Aff as HA
 import Halogen.HTML (button, p_, slot, slot_, div_, div, text, table_, tr_, th_) as HH
-import Halogen.HTML.Properties (class_) as HH
 import Halogen.HTML.Events as HE
+import Halogen.HTML.Properties (class_) as HH
 import Halogen.VDom.Driver (runUI)
 import Web.HTML.Common (ClassName(..))
-import Effect.Now (now)
-import Data.DateTime.Instant (instant, toDateTime, unInstant) as Date
-import Data.Time.Duration as Time 
 
-import InputField as InputField 
-import WorkoutSelector (Workout(..)) 
+import InputField as InputField
+import WorkoutSelector (Workout(..))
 import WorkoutSelector as WorkoutSelector
 import Utils (getJson, postJson)
 
@@ -62,7 +70,7 @@ data Action
   | Submit
   | WorkoutSelected WorkoutSelector.Output
 
-newtype Info = Info {sets :: Array WorkoutSet, selectedWorkout :: Maybe Workout}
+newtype Info = Info {sets :: Array WorkoutSet, selectedWorkout :: Maybe Workout, today :: DateTime}
 
 type Slots =
   ( workoutSelector :: H.Slot WorkoutSelector.Query WorkoutSelector.Output Unit
@@ -119,22 +127,19 @@ component =
         [ HH.button [HE.onClick (const Submit)]
           [ HH.text "submit" ]
         ]
-      , HH.table_ (renderSet <$> st.sets)
+      , HH.table_ (renderSet <$> currentWeek st.today st.sets)
       ]
     ]
 
     where
 
     renderSet (WorkoutSet ws) = HH.tr_
-      [ HH.th_ [ HH.text dateTxt ]
+      [ HH.th_ [ HH.text (displayDate ws.date) ]
       , HH.th_ [ HH.text ws.name ]
       , HH.th_ [ HH.text $ show ws.reps ]
       , HH.th_ [ HH.text $ show ws.weight ]
       ]
-      where
-      dateTxt = case Date.instant $ Time.Milliseconds (ws.date * 1000.0) of
-        Just inst -> show $ Date.toDateTime inst 
-        Nothing -> "Failed to parse date"
+
   render (Error e) = HH.text e
 
   handleAction :: Action -> H.HalogenM State Action Slots output m Unit
@@ -142,9 +147,10 @@ component =
     Init -> do
       workout <- H.request WorkoutSelector.proxy unit WorkoutSelector.GetValue
       verifySets <- getJson "/sets"
+      t <- H.liftEffect nowDateTime
       H.modify_ $ const $ either Error Full $ do
         sets <- verifySets
-        pure $ Info {sets: sets, selectedWorkout: workout}
+        pure $ Info {sets: sets, selectedWorkout: workout, today: t}
     Submit -> do
       let gather = runMaybeT $ do
             -- There's only one workout selector, so unit
@@ -187,3 +193,40 @@ recommendedRepRange (Info info) = HH.text $
   case info.selectedWorkout of
     Just (Workout w) -> "Recommended Rep Range: (" <> show w.repsMin <> "-" <> show w.repsMax <> ")"
     Nothing -> ""
+
+dateWriteFormat :: List FormatterCommand
+dateWriteFormat = List.fromFoldable
+  [ DayOfMonthTwoDigits
+  , Placeholder "-"
+  , MonthTwoDigits
+  , Placeholder "-"
+  , YearFull
+  ]
+
+unixEpochToDateTime :: Number -> Maybe DateTime
+unixEpochToDateTime date = Date.toDateTime <$> (Date.instant $ Time.Milliseconds (date * 1000.0))
+
+displayDate :: Number -> String
+displayDate date = case unixEpochToDateTime date of
+  Just dt -> format dateWriteFormat dt 
+  Nothing -> "Failed to parse date"
+
+workoutSetDateTime :: WorkoutSet -> Maybe DateTime
+workoutSetDateTime (WorkoutSet ws) = unixEpochToDateTime ws.date
+
+currentWeek :: DateTime -> Array WorkoutSet -> Array WorkoutSet
+-- Weeks begin on Sunday so take everything until
+-- the previous Saturday
+currentWeek today sets =
+  case DateTime.adjust days today of
+    Just d -> takeWhile (after d) sets
+    Nothing -> sets
+
+  where
+
+    days = Days $ toNumber $ negate $ (fromEnum (weekday $ date today) + 1) `mod` 7
+
+    after d s = case workoutSetDateTime s of
+      Just t -> d <= t
+      Nothing -> false
+      
