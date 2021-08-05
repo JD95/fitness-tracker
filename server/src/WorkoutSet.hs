@@ -9,7 +9,7 @@ import GHC.Generics
 data WorkoutSet = MkWorkoutSet
   { setWorkout :: String,
     setReps :: Int,
-    setDate :: UTCTime,
+    setDate :: Double,
     setWeight :: Int
   }
   deriving (Show, Generic)

@@ -1,6 +1,6 @@
 module Main where
 
-import Prelude (Unit, Void, discard, bind, join, const, pure, show, unit, ($), (<>), (<$>), (>>=), (==))
+import Prelude (Unit, Void, discard, bind, join, const, pure, show, unit, ($), (<>), (<$>), (>>=), (==), (*), (/))
 
 import Effect.Console (log)
 import Data.Array(cons, filter, head)
@@ -8,10 +8,7 @@ import Control.Monad.Trans.Class (lift)
 import Control.Monad.Maybe.Trans
 import Data.Natural (Natural, natToInt)
 import Data.Argonaut (class DecodeJson, class EncodeJson, jsonEmptyObject, decodeJson, (~>), (:=), (.:))
-import Data.Either (Either(..), either)
-import Data.Formatter.DateTime (FormatterCommand(..), format, unformat)
-import Data.List (List)
-import Data.List as List
+import Data.Either (either)
 import Data.Maybe (Maybe(..))
 import Effect (Effect)
 import Effect.Aff.Class (class MonadAff)
@@ -22,8 +19,8 @@ import Halogen.HTML.Properties (class_) as HH
 import Halogen.HTML.Events as HE
 import Halogen.VDom.Driver (runUI)
 import Web.HTML.Common (ClassName(..))
-import Effect.Now (nowDateTime)
-import Data.DateTime as Date
+import Effect.Now (now)
+import Data.DateTime.Instant (instant, toDateTime, unInstant) as Date
 import Data.Time.Duration as Time 
 
 import InputField as InputField 
@@ -39,7 +36,7 @@ main = HA.runHalogenAff do
 newtype WorkoutSet = WorkoutSet
   { name :: String
   , reps :: Int
-  , date :: String
+  , date :: Number 
   , weight :: Int
   }
 
@@ -135,9 +132,9 @@ component =
       , HH.th_ [ HH.text $ show ws.weight ]
       ]
       where
-      dateTxt = case unformat dateReadFormat ws.date of
-        Right t -> format dateWriteFormat t
-        Left _ -> "Format failed " <> ws.date
+      dateTxt = case Date.instant $ Time.Milliseconds (ws.date * 1000.0) of
+        Just inst -> show $ Date.toDateTime inst 
+        Nothing -> "Failed to parse date"
   render (Error e) = HH.text e
 
   handleAction :: Action -> H.HalogenM State Action Slots output m Unit
@@ -155,15 +152,12 @@ component =
             -- Multiple input fields, so we need slots for them
             weight <- MaybeT $ join <$> H.request InputField.natProxy weightSlot InputField.GetValue
             reps <- MaybeT $ join <$> H.request InputField.natProxy repsSlot InputField.GetValue
-            date <- format dateReadFormat <$> (MaybeT $ do
-                                                 t <- H.liftEffect nowDateTime
-                                                 pure $ Date.adjust (Time.negateDuration (Time.Hours 7.0)) t
-                                              )
+            Time.Milliseconds date <- lift $ Date.unInstant <$> H.liftEffect now
             lift $ H.liftEffect $ log $ show date
             pure $ WorkoutSet
               { name: workout.name
               , reps: natToInt reps
-              , date: date
+              , date: date / 1000.0
               , weight: natToInt weight
               }
       gather >>= case _ of
@@ -193,28 +187,3 @@ recommendedRepRange (Info info) = HH.text $
   case info.selectedWorkout of
     Just (Workout w) -> "Recommended Rep Range: (" <> show w.repsMin <> "-" <> show w.repsMax <> ")"
     Nothing -> ""
-
-dateReadFormat :: List FormatterCommand
-dateReadFormat = List.fromFoldable
-  [ YearFull
-  , Placeholder "-"
-  , MonthTwoDigits
-  , Placeholder "-"
-  , DayOfMonthTwoDigits
-  , Placeholder "T"
-  , Hours24
-  , Placeholder ":"
-  , MinutesTwoDigits
-  , Placeholder ":"
-  , SecondsTwoDigits
-  , Placeholder "Z"
-  ]
-
-dateWriteFormat :: List FormatterCommand
-dateWriteFormat = List.fromFoldable
-  [ DayOfMonthTwoDigits
-  , Placeholder "-"
-  , MonthTwoDigits
-  , Placeholder "-"
-  , YearFull
-  ]

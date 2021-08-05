@@ -7,7 +7,7 @@ import Database.PostgreSQL.Simple.SqlQQ
 import Database.PostgreSQL.Simple.Time
 import GHC.Int (Int64)
 
-insertSet :: Connection -> String -> Int -> Date -> Int -> IO Int64
+insertSet :: Connection -> String -> Int -> Double -> Int -> IO Int64
 insertSet conn setName setReps setDate setWeight = do
   execute
     conn
@@ -27,7 +27,7 @@ allWorkouts conn =
         join muscles on primary_muscles.muscle = muscles.name
     |]
 
-allWorkoutSets :: Connection -> IO [(String, Int, Date, Int)]
+allWorkoutSets :: Connection -> IO [(String, Int, Double, Int)]
 allWorkoutSets conn =
   query_
     conn
@@ -50,7 +50,7 @@ lastWeekVolume conn =
       order by pm.muscle
     |]
 
-volumePerExercisePerWeek :: Connection -> IO [(String, Int, Date)]
+volumePerExercisePerWeek :: Connection -> IO [(String, Int, Double)]
 volumePerExercisePerWeek conn =
   query_
     conn

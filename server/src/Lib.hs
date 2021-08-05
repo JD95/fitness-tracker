@@ -42,18 +42,14 @@ server (Env db) = workouts :<|> getSets :<|> postSets :<|> static
 
     getSets = do
       sets <- liftIO $ Q.allWorkoutSets db
-      pure . catMaybes $ validate <$> sets
+      pure [MkWorkoutSet a b c d | (a, b, c, d) <- sets]
 
-    postSets (MkWorkoutSet workout reps (UTCTime date _) weight) = do
-      liftIO $ void $ Q.insertSet db workout reps (Finite date) weight
+    postSets (MkWorkoutSet workout reps date weight) = do
+      liftIO $ void $ Q.insertSet db workout reps date weight
 
     workouts = liftIO $ do
       ws <- Q.allWorkouts db
       pure [Workout n t mi ma | (n, t, mi, ma) <- ws]
-
-    validate (_, _, NegInfinity, _) = Nothing
-    validate (_, _, PosInfinity, _) = Nothing
-    validate (a, b, Finite c, d) = Just $ MkWorkoutSet a b (UTCTime c 0) d
 
 data Config = Config
   { pgHost :: String,
