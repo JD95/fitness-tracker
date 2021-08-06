@@ -1,6 +1,6 @@
 module Main where
 
-import Prelude 
+import Prelude
 
 import Control.Monad.Maybe.Trans
 import Control.Monad.Trans.Class (lift)
@@ -8,16 +8,18 @@ import Data.Argonaut (class DecodeJson, class EncodeJson, jsonEmptyObject, decod
 import Data.Array (cons, filter, head, takeWhile)
 import Data.DateTime (DateTime, date, weekday)
 import Data.DateTime (adjust) as DateTime
-import Data.DateTime.Instant (instant, toDateTime, unInstant) as Date
+import Data.DateTime.Instant (Instant, instant, unInstant) as Date
 import Data.Either (either)
 import Data.Enum (fromEnum)
-import Data.Formatter.DateTime (format, FormatterCommand(..))
+import Data.Formatter.DateTime (format, FormatterCommand(DayOfMonthTwoDigits, Placeholder, MonthTwoDigits, YearFull))
 import Data.Int (toNumber)
+import Data.JSDate (JSDate)
+import Data.JSDate as JSDate
 import Data.List (List)
 import Data.List as List
-import Data.Maybe (Maybe(..))
+import Data.Maybe (Maybe(..), maybe)
 import Data.Natural (Natural, natToInt)
-import Data.Time.Duration (Days(..))
+import Data.Time.Duration (Minutes(..), Days(..))
 import Data.Time.Duration as Time
 import Effect (Effect)
 import Effect.Aff.Class (class MonadAff)
@@ -70,7 +72,13 @@ data Action
   | Submit
   | WorkoutSelected WorkoutSelector.Output
 
-newtype Info = Info {sets :: Array WorkoutSet, selectedWorkout :: Maybe Workout, today :: DateTime}
+newtype Info
+  = Info
+    { sets :: Array WorkoutSet
+    , selectedWorkout :: Maybe Workout
+    , today :: DateTime
+    , timezoneOffset :: Minutes 
+    }
 
 type Slots =
   ( workoutSelector :: H.Slot WorkoutSelector.Query WorkoutSelector.Output Unit
@@ -127,14 +135,14 @@ component =
         [ HH.button [HE.onClick (const Submit)]
           [ HH.text "submit" ]
         ]
-      , HH.table_ (renderSet <$> currentWeek st.today st.sets)
+      , HH.table_ (renderSet <$> currentWeek st.timezoneOffset st.today st.sets)
       ]
     ]
 
     where
 
     renderSet (WorkoutSet ws) = HH.tr_
-      [ HH.th_ [ HH.text (displayDate ws.date) ]
+      [ HH.th_ [ HH.text (displayDate st.timezoneOffset ws.date) ]
       , HH.th_ [ HH.text ws.name ]
       , HH.th_ [ HH.text $ show ws.reps ]
       , HH.th_ [ HH.text $ show ws.weight ]
@@ -148,9 +156,15 @@ component =
       workout <- H.request WorkoutSelector.proxy unit WorkoutSelector.GetValue
       verifySets <- getJson "/sets"
       t <- H.liftEffect nowDateTime
+      o <- H.liftEffect $ JSDate.getTimezoneOffset =<< JSDate.now 
       H.modify_ $ const $ either Error Full $ do
         sets <- verifySets
-        pure $ Info {sets: sets, selectedWorkout: workout, today: t}
+        pure $ Info
+          { sets: sets
+          , selectedWorkout: workout
+          , today: maybe t identity $ DateTime.adjust (Minutes $ negate o) t
+          , timezoneOffset: Minutes $ negate o
+          }
     Submit -> do
       let gather = runMaybeT $ do
             -- There's only one workout selector, so unit
@@ -203,21 +217,24 @@ dateWriteFormat = List.fromFoldable
   , YearFull
   ]
 
-unixEpochToDateTime :: Number -> Maybe DateTime
-unixEpochToDateTime date = Date.toDateTime <$> (Date.instant $ Time.Milliseconds (date * 1000.0))
+unixEpochToDateTime :: Minutes -> Number -> Maybe DateTime 
+unixEpochToDateTime offset date
+  = DateTime.adjust offset
+    =<< JSDate.toDateTime
+    =<< (JSDate.fromInstant <$> Date.instant (Time.Milliseconds (date * 1000.0)))
 
-displayDate :: Number -> String
-displayDate date = case unixEpochToDateTime date of
+displayDate :: Minutes -> Number -> String
+displayDate offset date = case unixEpochToDateTime offset date of
   Just dt -> format dateWriteFormat dt 
   Nothing -> "Failed to parse date"
 
-workoutSetDateTime :: WorkoutSet -> Maybe DateTime
-workoutSetDateTime (WorkoutSet ws) = unixEpochToDateTime ws.date
+workoutSetDateTime :: Minutes -> WorkoutSet -> Maybe DateTime
+workoutSetDateTime offset (WorkoutSet ws) = unixEpochToDateTime offset ws.date
 
-currentWeek :: DateTime -> Array WorkoutSet -> Array WorkoutSet
+currentWeek :: Minutes -> DateTime -> Array WorkoutSet -> Array WorkoutSet
 -- Weeks begin on Sunday so take everything until
 -- the previous Saturday
-currentWeek today sets =
+currentWeek offset today sets =
   case DateTime.adjust days today of
     Just d -> takeWhile (after d) sets
     Nothing -> sets
@@ -226,7 +243,7 @@ currentWeek today sets =
 
     days = Days $ toNumber $ negate $ (fromEnum (weekday $ date today) + 1) `mod` 7
 
-    after d s = case workoutSetDateTime s of
+    after d s = case workoutSetDateTime offset s of
       Just t -> d <= t
       Nothing -> false
       
