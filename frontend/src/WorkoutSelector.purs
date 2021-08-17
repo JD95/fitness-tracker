@@ -1,6 +1,6 @@
 module WorkoutSelector (Query(..), Output(..), Workout(..), proxy, comp) where
 
-import Prelude (Unit, pure, unit, bind, const, map, discard, ($), (>>=), (==))
+import Prelude (Unit, Void, pure, unit, bind, const, map, discard, ($), (>>=), (==), (<>))
 
 import Type.Proxy (Proxy(..))
 import Data.Either (Either(..))
@@ -9,7 +9,7 @@ import Effect.Aff.Class (class MonadAff)
 import Halogen as H
 import Halogen.HTML (text, select, option_) as HH
 import Halogen.HTML.Events as HE
-import Data.Array (head, filter)
+import Data.Array (head, filter, sort)
 import Data.Argonaut (class DecodeJson, class EncodeJson, jsonEmptyObject, decodeJson, (~>), (:=), (.:))
 
 import Utils (getJson)
@@ -75,8 +75,11 @@ comp =
 
   render :: State -> H.ComponentHTML Action () m
   render Empty = HH.text "No data yet"
-  render (Full options _) = HH.select [ HE.onValueChange Select]
-                            (map (\(Workout w) -> HH.option_ [HH.text w.name]) options)
+  render (Full options _) =
+    let names = sort $ map (\(Workout w) -> w.name) options
+        items = map (\name -> HH.option_ [HH.text name]) names 
+    in HH.select [ HE.onValueChange Select ] items
+                            
   render (Error e) = HH.text e
 
   handleAction :: Action -> H.HalogenM State Action () Output m Unit
