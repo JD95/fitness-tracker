@@ -5,11 +5,13 @@ import Prelude
 import Control.Monad.Maybe.Trans
 import Control.Monad.Trans.Class (lift)
 import Data.Argonaut (class DecodeJson, class EncodeJson, jsonEmptyObject, decodeJson, (~>), (:=), (.:))
-import Data.Array (cons, filter, head, takeWhile)
+import Data.Array (length, cons, filter, head, takeWhile)
 import Data.DateTime (DateTime, date, weekday)
 import Data.DateTime (adjust) as DateTime
 import Data.DateTime.Instant (Instant, instant, unInstant) as Date
-import Data.Either (either)
+import Data.Foldable (foldr)
+import Data.FoldableWithIndex (foldrWithIndex)
+import Data.Either (Either(..), either)
 import Data.Enum (fromEnum)
 import Data.Formatter.DateTime (format, FormatterCommand(DayOfMonthTwoDigits, Placeholder, MonthTwoDigits, YearFull))
 import Data.Int (toNumber)
@@ -17,10 +19,13 @@ import Data.JSDate (JSDate)
 import Data.JSDate as JSDate
 import Data.List (List)
 import Data.List as List
+import Data.Map (Map)
+import Data.Map as Map 
 import Data.Maybe (Maybe(..), maybe)
 import Data.Natural (Natural, natToInt)
 import Data.Time.Duration (Minutes(..), Days(..))
 import Data.Time.Duration as Time
+import Data.Tuple
 import Effect (Effect)
 import Effect.Aff.Class (class MonadAff)
 import Effect.Console (log)
@@ -76,6 +81,7 @@ newtype Info
   = Info
     { sets :: Array WorkoutSet
     , selectedWorkout :: Maybe Workout
+    , targetMuscles :: Map String String 
     , today :: DateTime
     , timezoneOffset :: Minutes 
     }
@@ -135,11 +141,28 @@ component =
         [ HH.button [HE.onClick (const Submit)]
           [ HH.text "submit" ]
         ]
-      , HH.table_ (renderSet <$> currentWeek st.timezoneOffset st.today st.sets)
+      , renderWorkoutVolume 
+      , HH.table_ (renderSet <$> thisWeekSets)
       ]
     ]
 
     where
+
+    thisWeekSets = currentWeek st.timezoneOffset st.today st.sets
+
+    renderWorkoutVolume :: H.ComponentHTML Action Slots m
+    renderWorkoutVolume = HH.div_ (map go $ Map.toUnfoldable counts) where
+
+      counts :: Map String Int
+      counts = foldr (Map.unionWith (+)) Map.empty $ map countW thisWeekSets 
+
+      countW (WorkoutSet w) =
+        let m = case Map.lookup w.name st.targetMuscles of
+              Just muscle -> muscle
+              Nothing -> "unknown" 
+        in Map.singleton m 1
+
+      go (Tuple muscle vol) = HH.p_ [HH.text $ muscle <> ": " <> show vol]
 
     renderSet (WorkoutSet ws) = HH.tr_
       [ HH.th_ [ HH.text (displayDate st.timezoneOffset ws.date) ]
@@ -154,6 +177,11 @@ component =
   handleAction = case _ of
     Init -> do
       workout <- H.request WorkoutSelector.proxy unit WorkoutSelector.GetValue
+      verifyWorkouts <- getJson "workouts"
+      let targetMuscles = case verifyWorkouts of
+            Right xs -> 
+              Map.fromFoldable $ map (\(Workout x) -> (Tuple x.name x.targetMuscle)) (xs :: Array Workout)
+            Left e -> Map.empty 
       verifySets <- getJson "/sets"
       t <- H.liftEffect nowDateTime
       o <- H.liftEffect $ JSDate.getTimezoneOffset =<< JSDate.now 
@@ -162,6 +190,7 @@ component =
         pure $ Info
           { sets: sets
           , selectedWorkout: workout
+          , targetMuscles: targetMuscles 
           , today: maybe t identity $ DateTime.adjust (Minutes $ negate o) t
           , timezoneOffset: Minutes $ negate o
           }
@@ -190,7 +219,9 @@ component =
     WorkoutSelected _ -> do
       w <- H.request WorkoutSelector.proxy unit WorkoutSelector.GetValue
       H.modify_ $ \st -> case st of
-        Full (Info i) -> Full $ Info i { selectedWorkout = w }
+        Full (Info i) -> Full $ Info i
+          { selectedWorkout = w
+          }
         _ -> st
       
 recommendedWeights :: forall m. Info -> H.ComponentHTML Action Slots m
