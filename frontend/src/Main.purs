@@ -32,7 +32,7 @@ import Effect.Console (log)
 import Effect.Now (now, nowDateTime)
 import Halogen as H
 import Halogen.Aff as HA
-import Halogen.HTML (button, p_, slot, slot_, div_, div, text, table_, tr_, th_) as HH
+import Halogen.HTML (button, p_, slot, slot_, div_, div, text, table_, tr, th_) as HH
 import Halogen.HTML.Events as HE
 import Halogen.HTML.Properties (class_) as HH
 import Halogen.HTML.Properties (InputType(..))
@@ -176,13 +176,19 @@ component =
 
       go (Tuple muscle vol) = HH.p_ [HH.text $ muscle <> ": " <> show vol]
 
-    renderSet (WorkoutSet ws) = HH.tr_
+    renderSet (WorkoutSet ws) = HH.tr [ HH.class_ (ClassName $ intensityColor ws.intensity) ]
       [ HH.th_ [ HH.text (displayDate st.timezoneOffset ws.date) ]
       , HH.th_ [ HH.text ws.name ]
       , HH.th_ [ HH.text $ show ws.reps ]
       , HH.th_ [ HH.text $ show ws.weight ]
       , HH.th_ [ HH.text $ show ws.intensity ]
       ]
+
+    intensityColor 4 = "failSet"
+    intensityColor 3 = "hardSet"
+    intensityColor 2 = "goodSet"
+    intensityColor 1 = "easySet"
+    intensityColor _ = "noEffortSet"
 
   render (Error e) = HH.text e
 

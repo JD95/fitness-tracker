@@ -8,6 +8,25 @@
     border: 3px solid green;
 }
 
+.failSet {
+    background-color: #a14747;
+}
+
+.hardSet {
+    background-color: #a17547;
+}
+
+.goodSet {
+    background-color: #60a147; 
+}
+
+.easySet {
+    background-color: #75a9d1;
+}
+
+.noEffortSet{
+    background-color: #bfe0cc;
+}
 
 table, th, td {
     border: 1px solid black;
