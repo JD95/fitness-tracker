@@ -147,7 +147,7 @@ component =
       , HH.p_
         [ HH.text "Intensity: "
         , let opts = ["No Effort", "Easy", "Good", "Hard", "Fail"]
-          in HH.slot_ RadioInput.proxy intensitySlot (RadioInput.radio opts) unit
+          in HH.slot_ RadioInput.proxy intensitySlot (RadioInput.radio "intensityInput" opts) unit
         ]
       , HH.p_
         [ HH.button [HE.onClick (const Submit)]

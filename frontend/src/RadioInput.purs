@@ -12,7 +12,7 @@ import Data.Either (Either(..))
 import Effect.Aff.Class (class MonadAff)
 import Halogen as H
 import Halogen.HTML (text, input, div_, label_, span_) as HH
-import Halogen.HTML.Properties (type_, value) as HP
+import Halogen.HTML.Properties (type_, name, value) as HP
 import Halogen.HTML.Properties (InputType(..))
 import Halogen.HTML.Events as HE
 
@@ -32,8 +32,8 @@ type Slots = ()
 proxy :: Proxy "radioInput"
 proxy = Proxy
 
-radio :: forall input output m. MonadAff m => Array String -> H.Component (Query Int) input output m
-radio options = 
+radio :: forall input output m. MonadAff m => String -> Array String -> H.Component (Query Int) input output m
+radio radioName options = 
   H.mkComponent
     { initialState
     , render
@@ -54,6 +54,7 @@ radio options =
       [ HH.input
         [ HP.type_ InputRadio 
         , HE.onValueChange $ \_ -> Selection i
+        , HP.name radioName
         ]
       , HH.text txt
       ]
