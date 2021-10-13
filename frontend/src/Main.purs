@@ -35,10 +35,12 @@ import Halogen.Aff as HA
 import Halogen.HTML (button, p_, slot, slot_, div_, div, text, table_, tr_, th_) as HH
 import Halogen.HTML.Events as HE
 import Halogen.HTML.Properties (class_) as HH
+import Halogen.HTML.Properties (InputType(..))
 import Halogen.VDom.Driver (runUI)
 import Web.HTML.Common (ClassName(..))
 
 import InputField as InputField
+import RadioInput as RadioInput 
 import WorkoutSelector (Workout(..))
 import WorkoutSelector as WorkoutSelector
 import Utils (getJson, postJson)
@@ -53,6 +55,7 @@ newtype WorkoutSet = WorkoutSet
   , reps :: Int
   , date :: Number 
   , weight :: Int
+  , intensity :: Int
   }
 
 instance decodeJsonWorkoutSet :: DecodeJson WorkoutSet where
@@ -62,7 +65,8 @@ instance decodeJsonWorkoutSet :: DecodeJson WorkoutSet where
     reps <- x .: "setReps"
     date <- x .: "setDate"
     weight <- x .: "setWeight"
-    pure $ WorkoutSet { name, reps, date, weight }
+    intensity <- x .: "setIntensity"
+    pure $ WorkoutSet { name, reps, date, weight, intensity }
 
 instance encodeJsonWorkoutSet :: EncodeJson WorkoutSet where
   encodeJson (WorkoutSet set) = do
@@ -70,6 +74,7 @@ instance encodeJsonWorkoutSet :: EncodeJson WorkoutSet where
     ~> "setReps" := set.reps
     ~> "setDate" := set.date
     ~> "setWeight" := set.weight
+    ~> "setIntensity" := set.intensity
     ~> jsonEmptyObject
 
 data Action
@@ -89,6 +94,7 @@ newtype Info
 type Slots =
   ( workoutSelector :: H.Slot WorkoutSelector.Query WorkoutSelector.Output Unit
   , natField :: H.Slot (InputField.Query Natural) Void Int
+  , radioInput :: H.Slot (RadioInput.Query Int) Void Int
   )
 
 data State
@@ -112,6 +118,7 @@ component =
 
   weightSlot = 0
   repsSlot = 1
+  intensitySlot = 2
 
   render :: State -> H.ComponentHTML Action Slots m
   render Empty = HH.text "No data yet"
@@ -136,6 +143,11 @@ component =
         ]
       , HH.p_
         [ recommendedRepRange state 
+        ]
+      , HH.p_
+        [ HH.text "Intensity: "
+        , let opts = ["No Effort", "Easy", "Good", "Hard", "Fail"]
+          in HH.slot_ RadioInput.proxy intensitySlot (RadioInput.radio opts) unit
         ]
       , HH.p_
         [ HH.button [HE.onClick (const Submit)]
@@ -169,6 +181,7 @@ component =
       , HH.th_ [ HH.text ws.name ]
       , HH.th_ [ HH.text $ show ws.reps ]
       , HH.th_ [ HH.text $ show ws.weight ]
+      , HH.th_ [ HH.text $ show ws.intensity ]
       ]
 
   render (Error e) = HH.text e
@@ -198,9 +211,12 @@ component =
       let gather = runMaybeT $ do
             -- There's only one workout selector, so unit
             Workout workout <- MaybeT $ H.request WorkoutSelector.proxy unit WorkoutSelector.GetValue
+
             -- Multiple input fields, so we need slots for them
             weight <- MaybeT $ join <$> H.request InputField.natProxy weightSlot InputField.GetValue
             reps <- MaybeT $ join <$> H.request InputField.natProxy repsSlot InputField.GetValue
+            intensity <- MaybeT $ H.request RadioInput.proxy intensitySlot RadioInput.GetValue
+
             Time.Milliseconds date <- lift $ Date.unInstant <$> H.liftEffect now
             lift $ H.liftEffect $ log $ show date
             pure $ WorkoutSet
@@ -208,6 +224,7 @@ component =
               , reps: natToInt reps
               , date: date / 1000.0
               , weight: natToInt weight
+              , intensity: intensity
               }
       gather >>= case _ of
         Just ws -> do

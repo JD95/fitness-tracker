@@ -7,15 +7,15 @@ import Database.PostgreSQL.Simple.SqlQQ
 import Database.PostgreSQL.Simple.Time
 import GHC.Int (Int64)
 
-insertSet :: Connection -> String -> Int -> Double -> Int -> IO Int64
-insertSet conn setName setReps setDate setWeight = do
+insertSet :: Connection -> String -> Int -> Double -> Int -> Int -> IO Int64
+insertSet conn setName setReps setDate setWeight setIntensity = do
   execute
     conn
     [sql|
-        insert into workout_set (name, reps, date_of, weight)
-        values (?,?,?,?);
+        insert into workout_set (name, reps, date_of, weight, intensity)
+        values (?,?,?,?, ?);
     |]
-    (setName, setReps, setDate, setWeight)
+    (setName, setReps, setDate, setWeight, setIntensity)
 
 allWorkouts :: Connection -> IO [(String, String, Int, Int)]
 allWorkouts conn =
@@ -23,11 +23,11 @@ allWorkouts conn =
     conn
     [sql|
         select primary_muscles.workout, muscles.name, muscles.min_rep, muscles.max_rep
-        from primary_muscles 
+        from primary_muscles
         join muscles on primary_muscles.muscle = muscles.name
     |]
 
-allWorkoutSets :: Connection -> IO [(String, Int, Double, Int)]
+allWorkoutSets :: Connection -> IO [(String, Int, Double, Int, Int)]
 allWorkoutSets conn =
   query_
     conn

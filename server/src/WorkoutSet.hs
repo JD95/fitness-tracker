@@ -10,7 +10,8 @@ data WorkoutSet = MkWorkoutSet
   { setWorkout :: String,
     setReps :: Int,
     setDate :: Double,
-    setWeight :: Int
+    setWeight :: Int,
+    setIntensity :: Int
   }
   deriving (Show, Generic)
 

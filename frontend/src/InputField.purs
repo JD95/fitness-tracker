@@ -15,7 +15,8 @@ import Halogen.HTML.Properties (type_, value) as HP
 import Halogen.HTML.Properties (InputType(..))
 import Halogen.HTML.Events as HE
 
-data Action = TextUpdate String
+data Action
+  = TextUpdate String
 
 type State a =
   { validate :: String -> Either String a
@@ -28,6 +29,7 @@ data Query val a
 
 type Slots :: forall k. Row k 
 type Slots = ()
+
 
 natProxy :: Proxy "natField"
 natProxy = Proxy 
@@ -95,4 +97,3 @@ comp f =
         Just (Right x) -> Just x
         Just (Left _) -> Nothing
         Nothing -> Nothing
-

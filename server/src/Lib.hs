@@ -42,10 +42,10 @@ server (Env db) = workouts :<|> getSets :<|> postSets :<|> static
 
     getSets = do
       sets <- liftIO $ Q.allWorkoutSets db
-      pure [MkWorkoutSet a b c d | (a, b, c, d) <- sets]
+      pure [MkWorkoutSet a b c d e | (a, b, c, d, e) <- sets]
 
-    postSets (MkWorkoutSet workout reps date weight) = do
-      liftIO $ void $ Q.insertSet db workout reps date weight
+    postSets (MkWorkoutSet workout reps date weight intensity) = do
+      liftIO $ void $ Q.insertSet db workout reps date weight intensity
 
     workouts = liftIO $ do
       ws <- Q.allWorkouts db
