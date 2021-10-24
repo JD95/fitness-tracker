@@ -20,12 +20,14 @@ extra-source-files:
 description:         Please see the README on GitHub at <https://github.com/githubuser/fitness-tracker#readme>
 
 dependencies:
+- aeson
 - base >= 4.7 && < 5
 - postgresql-simple
-- time
 - servant
 - servant-server
-- aeson
+- sqlite-simple
+- text
+- time
 - wai
 - warp
 

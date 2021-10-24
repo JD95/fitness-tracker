@@ -4,7 +4,7 @@ cabal-version: 1.12
 --
 -- see: https://github.com/sol/hpack
 --
--- hash: b76301b5eccf9b7b302f32ea2c76684834bc4398df3dfadce23a0e0ed6a19212
+-- hash: 37ab9f563104e269b553002d4b7627390ff8a6b4f46d01481a25ca94a487f256
 
 name:           fitness-tracker
 version:        0.1.0.0
@@ -28,7 +28,8 @@ source-repository head
 library
   exposed-modules:
       Lib
-      Queries
+      Queries.Postgres
+      Queries.Sqlite
       Workout
       WorkoutSet
   other-modules:
@@ -41,6 +42,8 @@ library
     , postgresql-simple
     , servant
     , servant-server
+    , sqlite-simple
+    , text
     , time
     , wai
     , warp
@@ -60,6 +63,8 @@ executable fitness-tracker
     , postgresql-simple
     , servant
     , servant-server
+    , sqlite-simple
+    , text
     , time
     , wai
     , warp
@@ -80,6 +85,8 @@ test-suite fitness-tracker-test
     , postgresql-simple
     , servant
     , servant-server
+    , sqlite-simple
+    , text
     , time
     , wai
     , warp

@@ -16,13 +16,11 @@ import Data.Aeson
 import Data.Maybe
 import Data.Proxy
 import Data.Time.Clock
-import Database.PostgreSQL.Simple
-import Database.PostgreSQL.Simple.SqlQQ
-import Database.PostgreSQL.Simple.Time
+import qualified Database.SQLite.Simple as SQ
 import GHC.Word
 import Network.Wai
 import Network.Wai.Handler.Warp
-import qualified Queries as Q
+import qualified Queries.Sqlite as S
 import Servant
 import Workout
 import WorkoutSet
@@ -33,7 +31,7 @@ type API =
     :<|> ("sets" :> ReqBody '[JSON] WorkoutSet :> Post '[JSON] ())
     :<|> Raw
 
-data Env = Env {db :: Connection}
+data Env = Env {db :: SQ.Connection}
 
 server :: Env -> Server API
 server (Env db) = workouts :<|> getSets :<|> postSets :<|> static
@@ -41,33 +39,19 @@ server (Env db) = workouts :<|> getSets :<|> postSets :<|> static
     static = serveDirectoryWebApp "../frontend"
 
     getSets = do
-      sets <- liftIO $ Q.allWorkoutSets db
+      sets <- liftIO $ S.allWorkoutSets db
       pure [MkWorkoutSet a b c d e | (a, b, c, d, e) <- sets]
 
     postSets (MkWorkoutSet workout reps date weight intensity) = do
-      liftIO $ void $ Q.insertSet db workout reps date weight intensity
+      liftIO $ void $ S.insertSet db (workout, reps, date, weight, intensity)
 
     workouts = liftIO $ do
-      ws <- Q.allWorkouts db
+      ws <- S.allWorkouts db
       pure [Workout n t mi ma | (n, t, mi, ma) <- ws]
 
 data Config = Config
-  { pgHost :: String,
-    pgPort :: Word16,
-    pgUser :: String,
-    pgPass :: String,
-    pgDb :: String
-  }
 
 app :: Config -> IO ()
 app config = do
-  conn <-
-    connect $
-      ConnectInfo
-        { connectHost = pgHost config,
-          connectPort = pgPort config,
-          connectUser = pgUser config,
-          connectPassword = pgPass config,
-          connectDatabase = pgDb config
-        }
+  conn <- SQ.open "test.db"
   run 8081 (serve (Proxy @API) (server $ Env conn))
