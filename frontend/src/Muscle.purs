@@ -12,7 +12,8 @@ derive newtype instance muscleIdEq :: Eq MuscleId
 derive newtype instance muscleIdOrd :: Ord MuscleId
 
 newtype Muscle = Muscle
-  { repsMin :: Int
+  { name :: String
+  , repsMin :: Int
   , repsMax :: Int
   , volMin :: Int
   , volMax :: Int
@@ -21,16 +22,18 @@ newtype Muscle = Muscle
 instance decodeJsonMuscle :: DecodeJson Muscle where
   decodeJson json = do
     x <- decodeJson json
+    name <- x .: "muscleName"
     repsMin <- x .: "muscleRepsMin"
     repsMax <- x .: "muscleRepsMax"
     volMin <- x .: "muscleVolMin"
     volMax <- x .: "muscleVolMax"
-    pure $ Muscle {repsMin , repsMax, volMin, volMax}
+    pure $ Muscle {name, repsMin , repsMax, volMin, volMax}
 
 instance encodeJsonMuscle :: EncodeJson Muscle where
   encodeJson (Muscle w) = do
-    "workoutRepsMin" := w.repsMin
-    ~> "workoutRepsMax" := w.repsMax
-    ~> "workoutVolMin" := w.volMin
-    ~> "workoutVolMax" := w.volMax
+    "muscleName" := w.name
+    ~> "muscleRepsMin" := w.repsMin
+    ~> "muscleRepsMax" := w.repsMax
+    ~> "muscleVolMin" := w.volMin
+    ~> "muscleVolMax" := w.volMax
     ~> jsonEmptyObject

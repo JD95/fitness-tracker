@@ -1,6 +1,6 @@
 module WorkoutSelector (Query(..), Output(..), proxy, comp) where
 
-import Prelude (Unit, pure, bind, const, map, discard, ($), (>>=), (==))
+import Prelude (Unit, unit, pure, bind, const, map, discard, ($), (>>=), (==))
 
 import Data.Map (Map)
 import Data.Map as Map 
@@ -30,14 +30,13 @@ data State
 newtype Info
   = Info
   { workouts :: Map WorkoutId (Id Workout) 
-  , selected :: Maybe WorkoutId
+  , workoutNames :: Map String WorkoutId
   }
 
 data Query a
-  = GetValue (WorkoutId -> a)
 
 data Output
-  = Selection
+  = Selection WorkoutId
 
 proxy :: Proxy "workoutSelector"
 proxy = Proxy
@@ -50,7 +49,6 @@ comp =
     , eval: H.mkEval $ H.defaultEval
       { handleAction = handleAction 
       , initialize = Just Init
-      , handleQuery = handleQuery
       }
     }
   where
@@ -63,41 +61,34 @@ comp =
   render (Error e) = HH.text e
   render (Full (Info info)) =
     let names :: Array String
-        names = sort $ Array.fromFoldable $ map (\(Id {values: Workout w}) -> w.name) $ Map.values info.workouts
+        names = sort
+                $ Array.fromFoldable
+                $ map (\(Id {values: Workout w}) -> w.name)
+                $ Map.values info.workouts
         items = map (\name -> HH.option_ [HH.text name]) names 
     in HH.select [ HE.onValueChange Select ] items
 
   handleAction :: Action -> H.HalogenM State Action () Output m Unit
   handleAction = case _ of
     Init -> do
-      verifyWorkouts <- getJson "workouts"
-      case verifyWorkouts of 
-        Right ws ->
-          let workouts = Array.foldr (\(Id x) -> Map.insert (WorkoutId x.id) x.values) Map.empty ws
-              selected = map (\(Id x) -> WorkoutId x.id) $ Array.head ws 
-          in H.modify_ $ const $ Full $ Info {workouts, selected}
+      getJson "workouts" >>= case _ of
+        Right (ws :: Array (Id Workout)) ->
+          let workouts :: Map WorkoutId (Id Workout)
+              workouts =
+                let toWorkoutEntry (Id x) = Map.insert (WorkoutId x.id) (Id x)
+                in Array.foldr toWorkoutEntry Map.empty ws
+              workoutNames :: Map String WorkoutId
+              workoutNames =
+                let toNameEntry (Id {id: i, values: Workout w}) = Map.insert w.name (WorkoutId i)
+                in Array.foldr toNameEntry Map.empty ws
+          in H.modify_ $ const $ Full $ Info {workouts, workoutNames}
         Left e -> H.modify_ $ const $ Error e 
     Select x -> do
-      H.modify_ $ case _ of
-        Empty -> Empty
+      H.get >>= case _ of
+        Error e -> pure unit 
+        Empty -> pure unit 
         Full (Info info) ->
-          let matchName (Id {values: Workout w}) = w.name == x
-              selection = Array.head $ filter matchName $ Array.fromFoldable $ Map.values info.workouts 
-          in Full (Info info
-                   { selected = case selection of
-                       Just (Id w) -> Just $ WorkoutId w.id
-                       Nothing -> info.selected
-                   })
-        Error e -> Error e
-
-      -- Notify parent that selection has changed
-      H.raise Selection
-
-  handleQuery :: forall x. Query x -> H.HalogenM State Action () Output m (Maybe x)
-  handleQuery = case _ of
-      GetValue reply -> do
-        H.get >>= case _ of
-          Full (Info {selected: Just x}) -> pure $ Just $ reply x
-          _ -> pure Nothing
-
-
+          case Map.lookup x info.workoutNames of
+            -- Notify parent that selection has changed
+            Just w -> H.raise (Selection w)
+            Nothing -> pure unit 
