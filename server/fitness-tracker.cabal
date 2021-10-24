@@ -4,7 +4,7 @@ cabal-version: 1.12
 --
 -- see: https://github.com/sol/hpack
 --
--- hash: 37ab9f563104e269b553002d4b7627390ff8a6b4f46d01481a25ca94a487f256
+-- hash: e7d53d976c139c481d3d7f61bd3be49b589e47fa296e99d878a5e051a18bdd92
 
 name:           fitness-tracker
 version:        0.1.0.0
@@ -28,7 +28,6 @@ source-repository head
 library
   exposed-modules:
       Lib
-      Queries.Postgres
       Queries.Sqlite
       Workout
       WorkoutSet

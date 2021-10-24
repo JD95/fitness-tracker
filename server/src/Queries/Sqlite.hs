@@ -8,12 +8,12 @@ import Database.SQLite.Simple.QQ
 import Database.SQLite.Simple.Time
 import GHC.Int (Int64)
 
-insertSet :: Connection -> (String, Int, Double, Int, Int) -> IO ()
+insertSet :: Connection -> (Int, Int, Double, Int, Int) -> IO ()
 insertSet conn (setName, setReps, setDate, setWeight, setIntensity) = do
   execute
     conn
     [sql|
-        insert into workout_set (name, reps, date_of, weight, intensity)
+        insert into workout_set (workout, reps, date, weight, intensity)
         values (?,?,?,?, ?);
     |]
     (setName, setReps, setDate, setWeight, setIntensity)
@@ -23,16 +23,16 @@ insertMuscle conn =
   execute
     conn
     [sql|
-        insert into muscles (name, min_rep, max_rep, min_vol, max_vol)
+        insert into muscle (name, min_rep, max_rep, min_vol, max_vol)
         values (?, ?, ?, ?, ?);
     |]
 
-insertPrimaryMuscle :: Connection -> (String, String) -> IO ()
+insertPrimaryMuscle :: Connection -> (Int, Int) -> IO ()
 insertPrimaryMuscle conn =
   execute
     conn
     [sql|
-        insert into primary_muscles (workout, muscle)
+        insert into primary_muscle (workout, muscle)
         values (?, ?);
     |]
 
@@ -46,20 +46,21 @@ insertWorkout conn val =
     |]
     (Only val)
 
-allWorkouts :: Connection -> IO [(String, String, Int, Int)]
+allWorkouts :: Connection -> IO [(Int, String, Int, Int, Int)]
 allWorkouts conn =
   query_
     conn
     [sql|
-        select primary_muscles.workout, muscles.name, muscles.min_rep, muscles.max_rep
-        from primary_muscles
-        join muscles on primary_muscles.muscle = muscles.name
+        select primary_muscle.workout_id, muscle.muscle_id, muscle.min_rep, muscle.max_rep
+        from primary_muscle
+        join muscle on primary_muscle.muscle = muscle.muscle_id
+        join workout on primary_muscle.workout = workout.workout_id
     |]
 
-allWorkoutSets :: Connection -> IO [(String, Int, Double, Int, Int)]
+allWorkoutSets :: Connection -> IO [(Int, Int, Int, Double, Int, Int)]
 allWorkoutSets conn =
   query_
     conn
     [sql|
-        select * from workout_set order by date_of desc
+        select * from workout_set order by date desc
     |]

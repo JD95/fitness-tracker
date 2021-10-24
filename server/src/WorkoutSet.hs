@@ -7,7 +7,7 @@ import Data.Time.Clock
 import GHC.Generics
 
 data WorkoutSet = MkWorkoutSet
-  { setWorkout :: String,
+  { setWorkout :: Int,
     setReps :: Int,
     setDate :: Double,
     setWeight :: Int,

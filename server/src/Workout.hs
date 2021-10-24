@@ -7,7 +7,7 @@ import GHC.Generics
 
 data Workout = Workout
   { workoutName :: String,
-    workoutTargetMuscle :: String,
+    workoutTargetMuscle :: Int,
     workoutRepsMin :: Int,
     workoutRepsMax :: Int
   }

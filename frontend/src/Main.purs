@@ -41,42 +41,16 @@ import Web.HTML.Common (ClassName(..))
 
 import InputField as InputField
 import RadioInput as RadioInput 
-import WorkoutSelector (Workout(..))
+import Workout (Workout(..))
+import WorkoutSet (WorkoutSet(..))
 import WorkoutSelector as WorkoutSelector
 import Utils (getJson, postJson)
+import DbId
 
 main :: Effect Unit
 main = HA.runHalogenAff do
   body <- HA.awaitBody
   runUI component unit body
-
-newtype WorkoutSet = WorkoutSet
-  { name :: String
-  , reps :: Int
-  , date :: Number 
-  , weight :: Int
-  , intensity :: Int
-  }
-
-instance decodeJsonWorkoutSet :: DecodeJson WorkoutSet where
-  decodeJson json = do
-    x <- decodeJson json
-    name <- x .: "setWorkout"
-    reps <- x .: "setReps"
-    date <- x .: "setDate"
-    weight <- x .: "setWeight"
-    intensity <- x .: "setIntensity"
-    pure $ WorkoutSet { name, reps, date, weight, intensity }
-
-instance encodeJsonWorkoutSet :: EncodeJson WorkoutSet where
-  encodeJson (WorkoutSet set) = do
-    "setWorkout" := set.name
-    ~> "setReps" := set.reps
-    ~> "setDate" := set.date
-    ~> "setWeight" := set.weight
-    ~> "setIntensity" := set.intensity
-    ~> jsonEmptyObject
-
 data Action
   = Init
   | Submit
@@ -84,8 +58,8 @@ data Action
 
 newtype Info
   = Info
-    { sets :: Array WorkoutSet
-    , selectedWorkout :: Maybe Workout
+    { sets :: Map WorkoutSetId (Id WorkoutSet)
+    , selectedWorkout :: Maybe (Id Workout)
     , targetMuscles :: Map String String 
     , today :: DateTime
     , timezoneOffset :: Minutes 
@@ -250,8 +224,8 @@ component =
 recommendedWeights :: forall m. Info -> H.ComponentHTML Action Slots m
 recommendedWeights (Info info) = HH.text $
   case info.selectedWorkout of
-    Just (Workout w) ->
-      case head $ filter (\(WorkoutSet s) -> s.name == w.name) $ info.sets of
+    Just (Id {values: Workout w}) ->
+      case head $ filter (\(Id {values: WorkoutSet s}) -> s.workout == w.name) $ info.sets of
         (Just (WorkoutSet x)) -> "Weight for Previous Set: " <> show x.weight
         Nothing -> ""
     Nothing -> ""
