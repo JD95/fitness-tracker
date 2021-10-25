@@ -1,22 +1,26 @@
 module Main where
 
 import Prelude
+  (Unit, Void, bind, const, discard,
+   identity, join, map, mod, negate,
+   pure, show, unit, ($), (*), (+),
+   (/), (<$>), (<=), (<>), (=<<),
+   (==), (>>=))
 
 import Control.Monad.Maybe.Trans
 import Control.Monad.Trans.Class (lift)
-import Data.Argonaut (class DecodeJson, class EncodeJson, jsonEmptyObject, decodeJson, (~>), (:=), (.:))
+import Data.Array (filter, head)
 import Data.Array as Array
-import Data.Array (length, cons, filter, head, takeWhile)
 import Data.DateTime (DateTime, date, weekday)
 import Data.DateTime (adjust) as DateTime
-import Data.DateTime.Instant (Instant, instant, unInstant) as Date
-import Data.Foldable (foldr)
-import Data.FoldableWithIndex (foldrWithIndex)
+import Data.DateTime.Instant (instant, unInstant) as Date
 import Data.Either (Either(..), either)
 import Data.Enum (fromEnum)
-import Data.Formatter.DateTime (format, FormatterCommand(DayOfMonthTwoDigits, Placeholder, MonthTwoDigits, YearFull))
+import Data.Foldable (foldr)
+import Data.Formatter.DateTime
+  (format, FormatterCommand(DayOfMonthTwoDigits, Placeholder,
+                            MonthTwoDigits, YearFull))
 import Data.Int (toNumber)
-import Data.JSDate (JSDate)
 import Data.JSDate as JSDate
 import Data.List (List)
 import Data.List as List
@@ -26,32 +30,36 @@ import Data.Maybe (Maybe(..), maybe)
 import Data.Natural (Natural, natToInt)
 import Data.Time.Duration (Minutes(..), Days(..))
 import Data.Time.Duration as Time
-import Data.Tuple
+import Data.Tuple (Tuple(..))
 import Effect (Effect)
 import Effect.Aff.Class (class MonadAff)
 import Effect.Console (log)
 import Effect.Now (now, nowDateTime)
 import Halogen as H
 import Halogen.Aff as HA
-import Halogen.HTML (button, p_, slot, slot_, div_, div, text, table_, tr, th_) as HH
+import Halogen.HTML
+  (button, p_, slot, slot_, div_, div,
+   text, table_, tr, th_) as HH
 import Halogen.HTML.Events as HE
 import Halogen.HTML.Properties (class_) as HH
-import Halogen.HTML.Properties (InputType(..))
 import Halogen.VDom.Driver (runUI)
 import Web.HTML.Common (ClassName(..))
 
-import PrimaryMuscle
+import PrimaryMuscle (PrimaryMuscle(..))
 import InputField as InputField
 import RadioInput as RadioInput
 import FitnessInfo
+  (FitnessInfo(..), Id(..), Muscle(..), MuscleId(..),
+   Workout(..), WorkoutId(..), WorkoutSet(..),
+   WorkoutSetId(..), mapFromIds)
 import WorkoutSelector as WorkoutSelector
 import Utils (getJson, postJson)
-import DbId
 
 main :: Effect Unit
 main = HA.runHalogenAff do
   body <- HA.awaitBody
   runUI component unit body
+
 data Action
   = Init
   | Submit
@@ -108,16 +116,12 @@ component =
         [ HH.text "Weight: "
         , HH.slot_ InputField.natProxy weightSlot InputField.nat unit
         ]
-      , HH.p_
-        [ recommendedWeights state
-        ]
+      , HH.p_ [recommendedWeights state]
       , HH.p_
         [ HH.text "Reps: "
         , HH.slot_ InputField.natProxy repsSlot InputField.nat unit
         ]
-      , HH.p_
-        [ recommendedRepRange state 
-        ]
+      , HH.p_ [recommendedRepRange state]
       , HH.p_
         [ HH.text "Intensity: "
         , let opts = ["No Effort", "Easy", "Good", "Hard", "Fail"]
@@ -166,7 +170,8 @@ component =
               , HH.th_ [ HH.text $ show ws.weight ]
               , HH.th_ [ HH.text $ show ws.intensity ]
               ]
-      in HH.tr [ HH.class_ (ClassName $ intensityColor ws.intensity) ] (maybe [] identity result)
+      in HH.tr [ HH.class_ (ClassName $ intensityColor ws.intensity) ]
+           (maybe [HH.th_ [HH.text "fail"]] identity result)
       
 
     intensityColor 4 = "failSet"
@@ -188,7 +193,7 @@ component =
       verifyWorkouts <- getJson "workouts"
       verifyPrimaryMuscles <- getJson "primary-muscles"
       verifyMuscles <- getJson "muscles"
-      verifySets <- getJson "/sets"
+      verifySets <- getJson "sets"
 
       H.modify_ $ const $ either Error Full $ do
 
@@ -217,39 +222,40 @@ component =
           , timezoneOffset: Minutes $ negate offset
           }
     Submit -> do
-      st <- H.get 
-      let gather = runMaybeT $ do
-            workoutId <- st.selectedWorkout
-            -- Multiple input fields, so we need slots for them
-            weight <- MaybeT $ join <$> H.request InputField.natProxy weightSlot InputField.GetValue
-            reps <- MaybeT $ join <$> H.request InputField.natProxy repsSlot InputField.GetValue
-            intensity <- MaybeT $ H.request RadioInput.proxy intensitySlot RadioInput.GetValue
+      H.get >>= case _ of
+        Empty -> pure unit
+        Error e -> pure unit
+        Full (Info st) -> do
+          let gather = runMaybeT $ do
+                WorkoutId workoutId <- MaybeT $ pure st.selectedWorkout
+                -- Multiple input fields, so we need slots for them
+                weight <- MaybeT $ join <$> H.request InputField.natProxy weightSlot InputField.GetValue
+                reps <- MaybeT $ join <$> H.request InputField.natProxy repsSlot InputField.GetValue
+                intensity <- MaybeT $ H.request RadioInput.proxy intensitySlot RadioInput.GetValue
 
-            Time.Milliseconds date <- lift $ Date.unInstant <$> H.liftEffect now
-            lift $ H.liftEffect $ log $ show date
-            pure $ WorkoutSet
-              { workout: workoutId
-              , reps: natToInt reps
-              , date: date / 1000.0
-              , weight: natToInt weight
-              , intensity: intensity
-              }
-      gather >>= case _ of
-        Just ws -> do
-          -- TODO return new id from POST /sets 
-          postJson ws "/sets"
-          -- Parse the new id
-          let newSetId = undefined
-          H.modify_ $ case _ of
-            Full (Info ss) ->
-              let FitnessInfo info = ss.fitnessInfo
-              in Full $ Info ss
-                   { fitnessInfo = info
-                     { sets = Map.insert (WorkoutSetId newSetId) (Id newSetId ws) info.sets
-                     }
-                   }
-            prev -> prev
-        Nothing -> pure unit 
+                Time.Milliseconds date <- lift $ Date.unInstant <$> H.liftEffect now
+                lift $ H.liftEffect $ log $ show date
+                pure $ WorkoutSet
+                  { workout: workoutId
+                  , reps: natToInt reps
+                  , date: date / 1000.0
+                  , weight: natToInt weight
+                  , intensity: intensity
+                  }
+          gather >>= case _ of
+            Just ws -> do
+              postJson ws "/sets" >>= case _ of
+                Right (Id newSet) -> H.modify_ $ case _ of
+                    Full (Info ss) ->
+                      let FitnessInfo info = ss.fitnessInfo
+                      in Full $ Info ss
+                           { fitnessInfo = FitnessInfo $ info
+                             { sets = Map.insert (WorkoutSetId newSet.id) (Id newSet) info.sets
+                             }
+                           }
+                    prev -> prev
+                Left _ -> pure unit
+            Nothing -> pure unit 
     WorkoutSelected (WorkoutSelector.Selection w) -> do
       H.modify_ $ \st -> case st of
         Full (Info i) -> Full $ Info i
@@ -259,17 +265,13 @@ component =
       
 recommendedWeights :: forall m. Info -> H.ComponentHTML Action Slots m
 recommendedWeights (Info {selectedWorkout, fitnessInfo: FitnessInfo info}) = HH.text $
-  case selectedWorkout of
-    Just workoutId -> 
-      -- lookup workout
-      case Map.lookup workoutId info.workouts of
-        Just (Id w) ->
-          let matchWorkout = (\(Id {values: WorkoutSet s}) -> s.workout == w.id)
-          in case head $ filter matchWorkout $ Array.fromFoldable $ Map.values info.sets of
-               (Just (Id {values: WorkoutSet x})) -> "Weight for Previous Set: " <> show x.weight
-               Nothing -> ""
-        Nothing -> ""
-    Nothing -> ""
+  let result = do
+        workoutId <- selectedWorkout
+        Id w <- Map.lookup workoutId info.workouts
+        let matchWorkout = (\(Id {values: WorkoutSet s}) -> s.workout == w.id)
+        Id {values: WorkoutSet x} <- head $ filter matchWorkout $ Array.fromFoldable $ Map.values info.sets 
+        pure $ "Weight for Previous Set: " <> show x.weight
+  in maybe "" identity result
 
 recommendedRepRange :: forall m. Info -> H.ComponentHTML Action Slots m
 recommendedRepRange (Info {selectedWorkout, fitnessInfo: FitnessInfo info})
@@ -309,7 +311,7 @@ currentWeek :: Minutes -> DateTime -> Array (Id WorkoutSet) -> Array (Id Workout
 -- the previous Saturday
 currentWeek offset today sets =
   case DateTime.adjust days today of
-    Just d -> takeWhile (after d) sets
+    Just d -> filter (after d) sets
     Nothing -> sets
 
   where
@@ -319,4 +321,3 @@ currentWeek offset today sets =
     after d s = case workoutSetDateTime offset s of
       Just t -> d <= t
       Nothing -> false
-      
