@@ -311,7 +311,10 @@ currentWeek :: Minutes -> DateTime -> Array (Id WorkoutSet) -> Array (Id Workout
 -- the previous Saturday
 currentWeek offset today sets =
   case DateTime.adjust days today of
-    Just d -> filter (after d) sets
+    Just d ->
+      Array.reverse
+      $ Array.sortWith (\(Id {values: WorkoutSet ws}) -> ws.date)
+      $ filter (after d) sets
     Nothing -> sets
 
   where
