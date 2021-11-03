@@ -355,7 +355,7 @@ setGroup setTxt sets =
   let toBlock (WorkoutSet ws) =
         HH.th [ HH.class_ (ClassName $ intensityColor ws.intensity)]
           [ HH.text $ show ws.weight <> "x" <> show ws.reps ]
-      cols = Array.cons (HH.th_ [ HH.text setTxt ]) (toBlock <$> sets)
+      cols = Array.cons (HH.th_ [ HH.text setTxt ]) (toBlock <$> Array.reverse sets)
   in HH.tr_ cols
 
 pastWorkoutSets :: forall m. Minutes -> WorkoutId -> Array WorkoutSet -> Array (H.ComponentHTML Action Slots m)
