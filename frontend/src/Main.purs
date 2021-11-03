@@ -10,8 +10,10 @@ import Prelude
 import Control.Monad.Maybe.Trans
 import Control.Monad.Trans.Class (lift)
 import Data.Array (filter, head)
+import Data.Array.NonEmpty (NonEmptyArray)
+import Data.Array.NonEmpty as NEArray
 import Data.Array as Array
-import Data.DateTime (DateTime, date, weekday)
+import Data.DateTime (DateTime, date, day, weekday)
 import Data.DateTime (adjust) as DateTime
 import Data.DateTime.Instant (instant, unInstant) as Date
 import Data.Either (Either(..), either)
@@ -25,7 +27,7 @@ import Data.JSDate as JSDate
 import Data.List (List)
 import Data.List as List
 import Data.Map (Map)
-import Data.Map as Map 
+import Data.Map as Map
 import Data.Maybe (Maybe(..), maybe)
 import Data.Natural (Natural, natToInt)
 import Data.Time.Duration (Minutes(..), Days(..))
@@ -39,7 +41,7 @@ import Halogen as H
 import Halogen.Aff as HA
 import Halogen.HTML
   (button, p_, slot, slot_, div_, div,
-   text, table_, tr, th_) as HH
+   text, table, table_, tr, tr_, th, th_) as HH
 import Halogen.HTML.Events as HE
 import Halogen.HTML.Properties (class_) as HH
 import Halogen.VDom.Driver (runUI)
@@ -68,9 +70,9 @@ data Action
 newtype Info
   = Info
     { fitnessInfo :: FitnessInfo
-    , selectedWorkout :: Maybe WorkoutId 
+    , selectedWorkout :: Maybe WorkoutId
     , today :: DateTime
-    , timezoneOffset :: Minutes 
+    , timezoneOffset :: Minutes
     }
 
 type Slots =
@@ -95,8 +97,8 @@ component =
       }
     }
   where
-  initialState :: forall a. a -> State 
-  initialState _ = Empty 
+  initialState :: forall a. a -> State
+  initialState _ = Empty
 
   weightSlot = 0
   repsSlot = 1
@@ -131,8 +133,27 @@ component =
         [ HH.button [HE.onClick (const Submit)]
           [ HH.text "submit" ]
         ]
-      , renderWorkoutVolume 
-      , HH.table_ (renderSet <$> thisWeekSets)
+      , renderWorkoutVolume
+      , HH.table [ HH.class_ (ClassName "pastWorkoutTable") ] $
+          let FitnessInfo info = st.fitnessInfo
+              nameLookup x = do
+                Id {values: Workout w} <- Map.lookup x info.workouts
+                pure w.name
+          in groupSets nameLookup ((\(Id {values: x}) -> x) <$> thisWeekSets)
+          --renderSet <$> thisWeekSets
+      ]
+    , HH.div_ $
+      [  let FitnessInfo info = st.fitnessInfo
+             sets =
+               Array.reverse $
+               Array.sortWith (\(WorkoutSet ws) -> ws.date) $
+               map (\(Id {values: ws}) -> ws) $
+               Array.fromFoldable $
+               Map.values info.sets
+             result = do
+               wid <- st.selectedWorkout
+               pure $ pastWorkoutSets st.timezoneOffset wid sets
+        in HH.table_ $ maybe [] identity result
       ]
     ]
 
@@ -147,12 +168,12 @@ component =
     renderWorkoutVolume = HH.div_ (map go $ Map.toUnfoldable counts) where
 
       counts :: Map String Int
-      counts = foldr (Map.unionWith (+)) Map.empty $ map countW thisWeekSets 
+      counts = foldr (Map.unionWith (+)) Map.empty $ map countW thisWeekSets
 
       countW (Id {values: WorkoutSet w}) =
         let (FitnessInfo info) = st.fitnessInfo
             result = do
-              muscleId <- Map.lookup (WorkoutId w.workout) info.primaryMuscles 
+              muscleId <- Map.lookup (WorkoutId w.workout) info.primaryMuscles
               Id {values: Muscle m} <- Map.lookup muscleId info.muscles
               pure m.name
         in Map.singleton (maybe "unknown" identity result) 1
@@ -172,13 +193,8 @@ component =
               ]
       in HH.tr [ HH.class_ (ClassName $ intensityColor ws.intensity) ]
            (maybe [HH.th_ [HH.text "fail"]] identity result)
-      
 
-    intensityColor 4 = "failSet"
-    intensityColor 3 = "hardSet"
-    intensityColor 2 = "goodSet"
-    intensityColor 1 = "easySet"
-    intensityColor _ = "noEffortSet"
+
 
   render (Error e) = HH.text e
 
@@ -187,7 +203,7 @@ component =
     Init -> do
       -- Get Time Info
       today <- H.liftEffect nowDateTime
-      offset <- H.liftEffect $ JSDate.getTimezoneOffset =<< JSDate.now 
+      offset <- H.liftEffect $ JSDate.getTimezoneOffset =<< JSDate.now
 
       -- Make API calls for data
       verifyWorkouts <- getJson "workouts"
@@ -199,7 +215,7 @@ component =
 
         -- Verify all the data from API is valid
         workouts <- verifyWorkouts
-        muscles <- verifyMuscles 
+        muscles <- verifyMuscles
         primaryMusclePairs <- verifyPrimaryMuscles
         sets <- verifySets
 
@@ -255,21 +271,21 @@ component =
                            }
                     prev -> prev
                 Left _ -> pure unit
-            Nothing -> pure unit 
+            Nothing -> pure unit
     WorkoutSelected (WorkoutSelector.Selection w) -> do
       H.modify_ $ \st -> case st of
         Full (Info i) -> Full $ Info i
           { selectedWorkout = Just w
           }
         _ -> st
-      
+
 recommendedWeights :: forall m. Info -> H.ComponentHTML Action Slots m
 recommendedWeights (Info {selectedWorkout, fitnessInfo: FitnessInfo info}) = HH.text $
   let result = do
         workoutId <- selectedWorkout
         Id w <- Map.lookup workoutId info.workouts
         let matchWorkout = (\(Id {values: WorkoutSet s}) -> s.workout == w.id)
-        Id {values: WorkoutSet x} <- head $ filter matchWorkout $ Array.fromFoldable $ Map.values info.sets 
+        Id {values: WorkoutSet x} <- head $ filter matchWorkout $ Array.fromFoldable $ Map.values info.sets
         pure $ "Weight for Previous Set: " <> show x.weight
   in maybe "" identity result
 
@@ -292,7 +308,7 @@ dateWriteFormat = List.fromFoldable
   , YearFull
   ]
 
-unixEpochToDateTime :: Minutes -> Number -> Maybe DateTime 
+unixEpochToDateTime :: Minutes -> Number -> Maybe DateTime
 unixEpochToDateTime offset date
   = DateTime.adjust offset
     =<< JSDate.toDateTime
@@ -300,7 +316,7 @@ unixEpochToDateTime offset date
 
 displayDate :: Minutes -> Number -> String
 displayDate offset date = case unixEpochToDateTime offset date of
-  Just dt -> format dateWriteFormat dt 
+  Just dt -> format dateWriteFormat dt
   Nothing -> "Failed to parse date"
 
 workoutSetDateTime :: Minutes -> Id WorkoutSet -> Maybe DateTime
@@ -324,3 +340,50 @@ currentWeek offset today sets =
     after d s = case workoutSetDateTime offset s of
       Just t -> d <= t
       Nothing -> false
+
+groupSets :: forall m. (WorkoutId -> Maybe String) -> Array WorkoutSet -> Array (H.ComponentHTML Action Slots m)
+groupSets nameLookup rawSets =
+  let groups = Array.groupBy (\(WorkoutSet a) (WorkoutSet b) -> a.workout == b.workout) rawSets
+  in map (\sets ->
+           let WorkoutSet ws = (NEArray.head sets)
+               name = maybe "Unknown" (\x -> x) (nameLookup (WorkoutId ws.workout))
+           in setGroup name (NEArray.toArray sets))
+     groups
+
+setGroup :: forall m. String -> Array WorkoutSet -> H.ComponentHTML Action Slots m
+setGroup setTxt sets =
+  let toBlock (WorkoutSet ws) =
+        HH.th [ HH.class_ (ClassName $ intensityColor ws.intensity)]
+          [ HH.text $ show ws.weight <> "x" <> show ws.reps ]
+      cols = Array.cons (HH.th_ [ HH.text setTxt ]) (toBlock <$> sets)
+  in HH.tr_ cols
+
+pastWorkoutSets :: forall m. Minutes -> WorkoutId -> Array WorkoutSet -> Array (H.ComponentHTML Action Slots m)
+pastWorkoutSets timezoneOffset (WorkoutId wid) sets =
+  map pastSet $
+  Array.take 10 $
+  Array.groupBy (\(WorkoutSet a) (WorkoutSet b) -> sameDay timezoneOffset a.date b.date) $
+  filter (\(WorkoutSet w) -> w.workout == wid) sets
+
+  where
+
+    pastSet :: NonEmptyArray WorkoutSet -> H.ComponentHTML Action Slots m
+    pastSet xs =
+      let (WorkoutSet ws) = NEArray.head xs
+          date = displayDate timezoneOffset ws.date
+      in setGroup date (NEArray.toArray xs)
+
+sameDay :: Minutes -> Number -> Number -> Boolean
+sameDay offset x y =
+  let result = do
+        xDateTime <- unixEpochToDateTime offset x
+        yDateTime <- unixEpochToDateTime offset y
+        pure $ day (date xDateTime) == day (date yDateTime)
+  in maybe false identity result
+
+intensityColor :: Int -> String
+intensityColor 4 = "failSet"
+intensityColor 3 = "hardSet"
+intensityColor 2 = "goodSet"
+intensityColor 1 = "easySet"
+intensityColor _ = "noEffortSet"
