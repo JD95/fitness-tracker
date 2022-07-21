@@ -4,7 +4,7 @@ cabal-version: 1.12
 --
 -- see: https://github.com/sol/hpack
 --
--- hash: 408d2dcfd8ec97092d4ca43e11741df07496cf8c022655cf8b38054cf7f73d67
+-- hash: 93b51710d54650dac3ee1a743b66521fe61826acc19e10c76992f30d4c6844e0
 
 name:           fitness-tracker
 version:        0.1.0.0
@@ -39,16 +39,15 @@ library
   hs-source-dirs:
       src
   build-depends:
-      aeson
+      aeson >=1.5.6.0
     , base >=4.7 && <5
-    , postgresql-simple
-    , servant
-    , servant-server
-    , sqlite-simple
+    , servant >=0.18.3
+    , servant-server >=0.18.3
+    , sqlite-simple >=0.4.18.0
     , text
     , time
-    , wai
-    , warp
+    , wai >=3.2.3
+    , warp >=3.3.17
   default-language: Haskell2010
 
 executable fitness-tracker
@@ -59,17 +58,16 @@ executable fitness-tracker
       app
   ghc-options: -threaded -rtsopts -with-rtsopts=-N
   build-depends:
-      aeson
+      aeson >=1.5.6.0
     , base >=4.7 && <5
     , fitness-tracker
-    , postgresql-simple
-    , servant
-    , servant-server
-    , sqlite-simple
+    , servant >=0.18.3
+    , servant-server >=0.18.3
+    , sqlite-simple >=0.4.18.0
     , text
     , time
-    , wai
-    , warp
+    , wai >=3.2.3
+    , warp >=3.3.17
   default-language: Haskell2010
 
 test-suite fitness-tracker-test
@@ -81,15 +79,14 @@ test-suite fitness-tracker-test
       test
   ghc-options: -threaded -rtsopts -with-rtsopts=-N
   build-depends:
-      aeson
+      aeson >=1.5.6.0
     , base >=4.7 && <5
     , fitness-tracker
-    , postgresql-simple
-    , servant
-    , servant-server
-    , sqlite-simple
+    , servant >=0.18.3
+    , servant-server >=0.18.3
+    , sqlite-simple >=0.4.18.0
     , text
     , time
-    , wai
-    , warp
+    , wai >=3.2.3
+    , warp >=3.3.17
   default-language: Haskell2010

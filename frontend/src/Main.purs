@@ -5,7 +5,7 @@ import Prelude
    identity, join, map, mod, negate,
    pure, show, unit, ($), (*), (+),
    (/), (<$>), (<=), (<>), (=<<),
-   (==), (>>=))
+   (==), (>>=), (&&), (<<<), (||))
 
 import Control.Monad.Maybe.Trans
 import Control.Monad.Trans.Class (lift)
@@ -26,13 +26,12 @@ import Data.Int (toNumber)
 import Data.JSDate as JSDate
 import Data.List (List)
 import Data.List as List
-import Data.Map (Map)
+import Data.Set as Set
 import Data.Map as Map
 import Data.Maybe (Maybe(..), maybe)
 import Data.Natural (Natural, natToInt)
 import Data.Time.Duration (Minutes(..), Days(..))
 import Data.Time.Duration as Time
-import Data.Tuple (Tuple(..))
 import Effect (Effect)
 import Effect.Aff.Class (class MonadAff)
 import Effect.Console (log)
@@ -140,9 +139,13 @@ component =
                 Id {values: Workout w} <- Map.lookup x info.workouts
                 pure w.name
           in groupSets nameLookup ((\(Id {values: x}) -> x) <$> thisWeekSets)
-          --renderSet <$> thisWeekSets
       ]
-    , HH.div_ $
+    , renderThisWeekSets
+    ]
+
+    where
+
+    renderThisWeekSets = HH.div_ $
       [  let FitnessInfo info = st.fitnessInfo
              sets =
                Array.reverse $
@@ -155,30 +158,37 @@ component =
                pure $ pastWorkoutSets st.timezoneOffset wid sets
         in HH.table_ $ maybe [] identity result
       ]
-    ]
-
-    where
 
     thisWeekSets =
       let (FitnessInfo info) = st.fitnessInfo
           sets = Array.fromFoldable $ Map.values info.sets
       in currentWeek st.timezoneOffset st.today sets
 
+    lastWeekSets =
+      let (FitnessInfo info) = st.fitnessInfo
+          sets = Array.fromFoldable $ Map.values info.sets
+      in previousWeek st.timezoneOffset st.today sets
+
     renderWorkoutVolume :: H.ComponentHTML Action Slots m
-    renderWorkoutVolume = HH.div_ (map go $ Map.toUnfoldable counts) where
+    renderWorkoutVolume = HH.div_ (map go allKeys) where
 
-      counts :: Map String Int
-      counts = foldr (Map.unionWith (+)) Map.empty $ map countW thisWeekSets
+      allKeys = Set.toUnfoldable $ Map.keys volumeCurrent <> Map.keys volumePrevious
 
-      countW (Id {values: WorkoutSet w}) =
+      volumeCurrent = foldr buildCount Map.empty thisWeekSets
+      volumePrevious = foldr buildCount Map.empty lastWeekSets
+
+      buildCount (Id {values: WorkoutSet w}) answer =
         let (FitnessInfo info) = st.fitnessInfo
             result = do
               muscleId <- Map.lookup (WorkoutId w.workout) info.primaryMuscles
               Id {values: Muscle m} <- Map.lookup muscleId info.muscles
               pure m.name
-        in Map.singleton (maybe "unknown" identity result) 1
+        in Map.alter (Just <<< maybe 0 ((+) 1)) (maybe "unknown" identity result) answer
 
-      go (Tuple muscle vol) = HH.p_ [HH.text $ muscle <> ": " <> show vol]
+      go muscle =
+        let previous = maybe 0 identity $ Map.lookup muscle volumePrevious
+            current = maybe 0 identity $ Map.lookup muscle volumeCurrent
+        in HH.p_ [HH.text $ muscle <> ": " <> show previous <> " → " <> show current]
 
     renderSet (Id {id, values: WorkoutSet ws}) =
       let FitnessInfo info = st.fitnessInfo
@@ -193,8 +203,6 @@ component =
               ]
       in HH.tr [ HH.class_ (ClassName $ intensityColor ws.intensity) ]
            (maybe [HH.th_ [HH.text "fail"]] identity result)
-
-
 
   render (Error e) = HH.text e
 
@@ -323,22 +331,37 @@ workoutSetDateTime :: Minutes -> Id WorkoutSet -> Maybe DateTime
 workoutSetDateTime offset (Id {values: WorkoutSet ws}) = unixEpochToDateTime offset ws.date
 
 currentWeek :: Minutes -> DateTime -> Array (Id WorkoutSet) -> Array (Id WorkoutSet)
+currentWeek = nthWeekAgo 0
+
+previousWeek :: Minutes -> DateTime -> Array (Id WorkoutSet) -> Array (Id WorkoutSet)
+previousWeek = nthWeekAgo 1
+
+nthWeekAgo :: Int -> Minutes -> DateTime -> Array (Id WorkoutSet) -> Array (Id WorkoutSet)
 -- Weeks begin on Sunday so take everything until
 -- the previous Saturday
-currentWeek offset today sets =
-  case DateTime.adjust days today of
-    Just d ->
+nthWeekAgo n offset today sets =
+  case dateRange of
+    Just range ->
       Array.reverse
       $ Array.sortWith (\(Id {values: WorkoutSet ws}) -> ws.date)
-      $ filter (after d) sets
+      $ filter (between range) sets
     Nothing -> sets
 
   where
 
-    days = Days $ toNumber $ negate $ (fromEnum (weekday $ date today) + 1) `mod` 7
+    dateRange = do
+      x <- DateTime.adjust (Days days) today
+      y <- DateTime.adjust (Days $ days + 7.0) today
+      pure {start: x, end: y}
 
-    after d s = case workoutSetDateTime offset s of
-      Just t -> d <= t
+    days = toNumber $ negate $ daysSinceSunday + weekOffset where
+      daysSinceSunday = (fromEnum (weekday $ date today) + 1) `mod` 7
+      weekOffset = (n * 7)
+
+    between r s = case workoutSetDateTime offset s of
+      -- If it's the current week, don't consider
+      -- the end date
+      Just t -> r.start <= t && (n == 0 || t <= r.end)
       Nothing -> false
 
 groupSets :: forall m. (WorkoutId -> Maybe String) -> Array WorkoutSet -> Array (H.ComponentHTML Action Slots m)
