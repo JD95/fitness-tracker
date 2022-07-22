@@ -183,7 +183,7 @@ component =
               muscleId <- Map.lookup (WorkoutId w.workout) info.primaryMuscles
               Id {values: Muscle m} <- Map.lookup muscleId info.muscles
               pure m.name
-        in Map.alter (Just <<< maybe 0 ((+) 1)) (maybe "unknown" identity result) answer
+        in Map.alter (Just <<< maybe 1 ((+) 1)) (maybe "unknown" identity result) answer
 
       go muscle =
         let previous = maybe 0 identity $ Map.lookup muscle volumePrevious
