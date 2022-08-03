@@ -53,6 +53,7 @@ server (Env db) = workouts :<|> getMuscles :<|> getPrimaryMuscles :<|> getSets :
 
     getSets = do
       sets <- liftIO $ S.allWorkoutSets db
+      -- sets <- liftIO $ S.previousSets (S.Weeks 1) db
       pure [Id i (MkWorkoutSet a b c d e) | (i, a, b, c, d, e) <- sets]
 
     postSets ws@(MkWorkoutSet workout reps date weight intensity) = do
