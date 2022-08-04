@@ -4,10 +4,12 @@
 module Queries.Sqlite where
 
 import Data.Fixed
-import Data.Text
+import Data.Text (Text)
+import qualified Data.Text as Text
 import Data.Time.Calendar (Day, addDays, dayOfWeek)
 import Data.Time.Clock (UTCTime (..), getCurrentTime, nominalDiffTimeToSeconds)
 import Data.Time.Clock.POSIX (utcTimeToPOSIXSeconds)
+import Data.Traversable
 import Database.SQLite.Simple
 import Database.SQLite.Simple.QQ
 import Database.SQLite.Simple.Time
@@ -42,17 +44,28 @@ utcTimeToDouble t =
   let (MkFixed nWeeksAgoPico) = nominalDiffTimeToSeconds $ utcTimeToPOSIXSeconds t
    in (fromIntegral nWeeksAgoPico :: Double) / (10.0 ^ 12)
 
-previousSets :: Weeks -> Connection -> IO [(Int, Int, Int, Double, Int, Int)]
+previousSunday :: UTCTime -> UTCTime
+previousSunday today =
+  let diff = case daysSinceSunday (utctDay today) of
+        0 -> 7
+        n -> n
+   in UTCTime (addDays (fromIntegral $ negate diff) (utctDay today)) 0
+
+previousSets :: Weeks -> Connection -> IO [[(Int, Int, Int, Double, Int, Int)]]
 previousSets (Weeks w) conn = do
-  today <- utctDay <$> getCurrentTime
-  let nWeeksAgoDay = UTCTime (addDays (fromIntegral $ (-7 * w) - (daysSinceSunday today)) today) 0
-  let t = utcTimeToDouble nWeeksAgoDay
-  query
-    conn
-    [sql|
-        select * from workout_set where date > ? order by date desc
-    |]
-    (Only t)
+  now <- getCurrentTime
+  let days = utcTimeToDouble <$> iterate previousSunday now
+  let weekRanges = take (w + 1) $ zip (tail days) days
+  for weekRanges $
+    query
+      conn
+      [sql|
+          select *
+          from workout_set
+          where ? < date
+            and date < ?
+          order by date desc
+      |]
 
 insertMuscle :: Connection -> (String, Int, Int, Int, Int) -> IO ()
 insertMuscle conn =

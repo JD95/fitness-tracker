@@ -32,7 +32,7 @@ type API =
   ("workouts" :> Get '[JSON] [Id Workout])
     :<|> ("muscles" :> Get '[JSON] [Id Muscle])
     :<|> ("primary-muscles" :> Get '[JSON] [PrimaryMuscle])
-    :<|> ("sets" :> Get '[JSON] [Id WorkoutSet])
+    :<|> ("sets" :> QueryParam "weeks" Int :> Get '[JSON] [[Id WorkoutSet]])
     :<|> ("sets" :> ReqBody '[JSON] WorkoutSet :> Post '[JSON] (Id WorkoutSet))
     :<|> Raw
 
@@ -51,10 +51,10 @@ server (Env db) = workouts :<|> getMuscles :<|> getPrimaryMuscles :<|> getSets :
       primaryMuscles <- liftIO $ S.allPrimaryMuscles db
       pure [PrimaryMuscle a b | (a, b) <- primaryMuscles]
 
-    getSets = do
-      sets <- liftIO $ S.allWorkoutSets db
-      -- sets <- liftIO $ S.previousSets (S.Weeks 1) db
-      pure [Id i (MkWorkoutSet a b c d e) | (i, a, b, c, d, e) <- sets]
+    getSets mweeks = do
+      let weeks = maybe 0 Prelude.id mweeks
+      setsPerWeek <- liftIO $ S.previousSets (S.Weeks weeks) db
+      pure $ fmap (\set -> [Id i (MkWorkoutSet a b c d e) | (i, a, b, c, d, e) <- set]) setsPerWeek
 
     postSets ws@(MkWorkoutSet workout reps date weight intensity) = do
       liftIO $ do
