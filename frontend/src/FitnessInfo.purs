@@ -7,6 +7,7 @@ module FitnessInfo
 )
 where
 
+import Data.Newtype
 import WorkoutSet
 import Workout
 import Muscle
@@ -21,3 +22,5 @@ newtype FitnessInfo
   , sets :: Map WorkoutSetId (Id WorkoutSet)
   , setsForWeek :: Array (Array (Id WorkoutSet))
   }
+
+derive instance newtypeFitnessInfo :: Newtype FitnessInfo _

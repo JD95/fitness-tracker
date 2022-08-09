@@ -7,8 +7,9 @@ import Prelude
    (/), (<$>), (<>), (=<<), (/=),
    (==), (>>=), (<<<))
 
+import Data.Newtype (over)
 import Data.List as List
-import Control.Monad.Maybe.Trans
+import Control.Monad.Maybe.Trans (MaybeT(..), runMaybeT)
 import Control.Monad.Trans.Class (lift)
 import Data.Array (filter, head)
 import Data.Array.NonEmpty (NonEmptyArray)
@@ -310,26 +311,26 @@ component =
           gather >>= case _ of
             Just ws -> do
               postJson ws "/sets" >>= case _ of
-                Right (Id newSet) -> H.modify_ $ case _ of
-                    Full (Info ss) ->
-                      let FitnessInfo info = ss.fitnessInfo
-                      in Full $ Info ss
-                           { fitnessInfo = FitnessInfo $ info
-                             { sets = Map.insert (WorkoutSetId newSet.id) (Id newSet) info.sets
-                             , setsForWeek
-                                 = maybe info.setsForWeek identity
-                                 $ Array.modifyAt 0 (Array.cons (Id newSet)) info.setsForWeek
-                             }
-                           }
-                    prev -> prev
+                Right (Id newSet) -> H.modify_ $ updateFull $
+                    updateFitnessInfo $ over FitnessInfo $
+                      \info -> info
+                         { sets = Map.insert (WorkoutSetId newSet.id) (Id newSet) info.sets
+                         , setsForWeek
+                             = maybe info.setsForWeek identity
+                             $ Array.modifyAt 0 (Array.cons (Id newSet)) info.setsForWeek
+                         }
                 Left _ -> pure unit
             Nothing -> pure unit
     WorkoutSelected (WorkoutSelector.Selection w) -> do
-      H.modify_ $ \st -> case st of
-        Full (Info i) -> Full $ Info i
-          { selectedWorkout = Just w
-          }
-        _ -> st
+      H.modify_ $ updateFull $
+        \(Info i) -> Info i { selectedWorkout = Just w }
+
+updateFull :: (Info -> Info) -> State -> State
+updateFull f (Full info) = Full (f info)
+updateFull _ prev = prev
+
+updateFitnessInfo :: (FitnessInfo -> FitnessInfo) -> Info -> Info
+updateFitnessInfo f (Info info) = Info info { fitnessInfo = f info.fitnessInfo }
 
 recommendedWeights :: forall m. Info -> H.ComponentHTML Action Slots m
 recommendedWeights (Info {selectedWorkout, fitnessInfo: FitnessInfo info}) = HH.text $
