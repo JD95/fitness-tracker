@@ -37,7 +37,7 @@ newtype Weeks = Weeks Int
   deriving (Eq, Ord, Show)
 
 daysSinceSunday :: Day -> Int
-daysSinceSunday = (+) 1 . fromEnum . dayOfWeek
+daysSinceSunday = fromEnum . dayOfWeek
 
 utcTimeToDouble :: UTCTime -> Double
 utcTimeToDouble t =

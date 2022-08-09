@@ -130,17 +130,20 @@ component =
           [ HH.text "submit" ]
         ]
       , renderWorkoutVolume
-      , renderPastWorkoutTable
+      , thisWeeksSetsGrouped
       ]
-    , renderThisWeekSets
+    , workoutSetHistory
     ]
 
     where
 
-    renderPastWorkoutTable =
+    thisWeeksSetsGrouped =
       HH.table [ HH.class_ (ClassName "pastWorkoutTable") ] $
         map mkSetGroup $
-        Array.groupBy (\(WorkoutSet a) (WorkoutSet b) -> a.workout == b.workout) $
+        Array.concat $
+        map (Array.groupBy (\(WorkoutSet a) (WorkoutSet b) -> a.workout == b.workout)
+               <<< NEArray.toArray) $
+        Array.groupBy (\(WorkoutSet a) (WorkoutSet b) -> sameDay st.timezoneOffset a.date b.date) $
         map (\(Id {values: x}) -> x) $
         thisWeekSets
 
@@ -156,11 +159,11 @@ component =
         WorkoutSet ws = NEArray.head sets
         name = maybe "Unknown" identity (nameLookup (WorkoutId ws.workout))
 
-    renderThisWeekSets = HH.div_ $
+    workoutSetHistory = HH.div_ $
       [  let FitnessInfo info = st.fitnessInfo
              result = do
                wid <- st.selectedWorkout
-               sets <- Array.head (map (\(Id x) -> x.values) <$> info.setsForWeek)
+               let sets = Array.concat (map (\(Id x) -> x.values) <$> info.setsForWeek)
                pure $ pastWorkoutSets st.timezoneOffset wid sets
         in HH.table_ $ maybe [] identity result
       ]
@@ -170,7 +173,7 @@ component =
       pastWorkoutSets timezoneOffset (WorkoutId wid) =
         map pastSet
           <<< Array.take 10
-          <<< Array.groupBy (\(WorkoutSet a) (WorkoutSet b) -> sameDay timezoneOffset a.date b.date)
+          <<< Array.groupBy (\(WorkoutSet a) (WorkoutSet b) -> sameDay st.timezoneOffset a.date b.date)
           <<< filter (\(WorkoutSet w) -> w.workout == wid)
 
         where
