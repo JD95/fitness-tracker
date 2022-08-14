@@ -68,6 +68,7 @@ newtype Info
   = Info
     { fitnessInfo :: FitnessInfo
     , selectedWorkout :: Maybe WorkoutId
+    , selectedWorkoutSets :: Maybe (Array (NonEmptyArray (Id WorkoutSet)))
     , today :: DateTime
     , timezoneOffset :: Minutes
     }
@@ -163,27 +164,17 @@ component =
     workoutSetHistory = HH.div_ $
       [  let FitnessInfo info = st.fitnessInfo
              result = do
-               wid <- st.selectedWorkout
-               let sets = Array.concat (map (\(Id x) -> x.values) <$> info.setsForWeek)
-               pure $ pastWorkoutSets st.timezoneOffset wid sets
+               wsets <- st.selectedWorkoutSets
+               pure $ pastSet st.timezoneOffset <<< map (\(Id x) -> x.values) <$> wsets
         in HH.table_ $ maybe [] identity result
       ]
 
       where
 
-      pastWorkoutSets timezoneOffset (WorkoutId wid) =
-        map pastSet
-          <<< Array.take 10
-          <<< Array.groupBy (\(WorkoutSet a) (WorkoutSet b) -> sameDay st.timezoneOffset a.date b.date)
-          <<< filter (\(WorkoutSet w) -> w.workout == wid)
-
-        where
-
-          pastSet :: NonEmptyArray WorkoutSet -> H.ComponentHTML Action Slots m
-          pastSet xs =
-            let (WorkoutSet ws) = NEArray.head xs
-                date = displayDate timezoneOffset ws.date
-            in setGroup date (NEArray.toArray xs)
+      pastSet timezoneOffset xs =
+        let (WorkoutSet ws) = NEArray.head xs
+            date = displayDate timezoneOffset ws.date
+        in setGroup date (NEArray.toArray xs)
 
     thisWeekSets =
       let (FitnessInfo info) = st.fitnessInfo
@@ -284,6 +275,7 @@ component =
             , primaryMuscles: primaryMuscles
             }
           , selectedWorkout: Nothing
+          , selectedWorkoutSets: Nothing
           , today: maybe today identity $ DateTime.adjust (Minutes $ negate offset) today
           , timezoneOffset: Minutes $ negate offset
           }
@@ -321,9 +313,15 @@ component =
                          }
                 Left _ -> pure unit
             Nothing -> pure unit
-    WorkoutSelected (WorkoutSelector.Selection w) -> do
-      H.modify_ $ updateFull $
-        \(Info i) -> Info i { selectedWorkout = Just w }
+    WorkoutSelected (WorkoutSelector.Selection w@(WorkoutId wid)) -> do
+      verifySets :: Either String (Array (NonEmptyArray (Id WorkoutSet)))
+        <- getJson ("workout" <> "/" <> show wid <> "/sets")
+      case verifySets of
+        Right sets -> do
+          H.modify_ $ updateFull $ \(Info i) ->
+            Info i { selectedWorkout = Just w
+                   , selectedWorkoutSets = Just sets }
+        Left _ -> pure unit
 
 updateFull :: (Info -> Info) -> State -> State
 updateFull f (Full info) = Full (f info)
@@ -371,10 +369,6 @@ displayDate :: Minutes -> Number -> String
 displayDate offset date = case unixEpochToDateTime offset date of
   Just dt -> format dateWriteFormat dt
   Nothing -> "Failed to parse date"
-
-workoutSetDateTime :: Minutes -> Id WorkoutSet -> Maybe DateTime
-workoutSetDateTime offset (Id {values: WorkoutSet ws}) = unixEpochToDateTime offset ws.date
-
 
 setGroup :: forall m. String -> Array WorkoutSet -> H.ComponentHTML Action Slots m
 setGroup setTxt sets =

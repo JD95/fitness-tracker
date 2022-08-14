@@ -1,6 +1,5 @@
 {-# LANGUAGE DataKinds #-}
 {-# LANGUAGE OverloadedStrings #-}
-{-# LANGUAGE QuasiQuotes #-}
 {-# LANGUAGE TypeApplications #-}
 {-# LANGUAGE TypeOperators #-}
 
@@ -10,23 +9,28 @@ module Lib
   )
 where
 
+import Data.Time.Clock (UTCTime(utctDay))
+import Data.Ord (comparing)
+import Data.List (groupBy)
 import Control.Monad.IO.Class (MonadIO(liftIO))
 import Data.Maybe (fromMaybe)
 import Data.Proxy (Proxy(Proxy))
 import qualified Database.SQLite.Simple as SQ
-import DbId (Id(Id))
+import DbId (Id(Id, values))
 import Muscle (Muscle(Muscle))
 import Network.Wai.Handler.Warp (run)
 import PrimaryMuscle (PrimaryMuscle(PrimaryMuscle))
 import qualified Queries.Sqlite as S
 import Servant
 import Workout (Workout(Workout))
-import WorkoutSet (WorkoutSet(MkWorkoutSet))
+import WorkoutSet (WorkoutSet(MkWorkoutSet, setWorkout, setDate))
+import Queries.Sqlite (doubleToUtcTime)
 
 type API =
   ("workouts" :> Get '[JSON] [Id Workout])
     :<|> ("muscles" :> Get '[JSON] [Id Muscle])
     :<|> ("primary-muscles" :> Get '[JSON] [PrimaryMuscle])
+    :<|> ("workout" :> Capture "workout-id" Int :> "sets" :> Get '[JSON] [[Id WorkoutSet]])
     :<|> ("sets" :> QueryParam "weeks" Int :> Get '[JSON] [[Id WorkoutSet]])
     :<|> ("sets" :> ReqBody '[JSON] WorkoutSet :> Post '[JSON] (Id WorkoutSet))
     :<|> Raw
@@ -34,7 +38,14 @@ type API =
 newtype Env = Env {db :: SQ.Connection}
 
 server :: Env -> Server API
-server (Env db) = workouts :<|> getMuscles :<|> getPrimaryMuscles :<|> getSets :<|> postSets :<|> static
+server (Env db) =
+  workouts :<|>
+  getMuscles :<|>
+  getPrimaryMuscles :<|>
+  getSetsForWorkout :<|>
+  getSets :<|>
+  postSets :<|>
+  static
   where
     static = serveDirectoryWebApp "../frontend"
 
@@ -57,11 +68,28 @@ server (Env db) = workouts :<|> getMuscles :<|> getPrimaryMuscles :<|> getSets :
         i <- SQ.lastInsertRowId db
         pure $ Id (fromIntegral i) ws
 
+    getSetsForWorkout workout = do
+      liftIO $ do
+        sets <- S.setsForWorkout db workout 10
+        pure $ groupSets $ fmap (\(S.DbSet (i, a, b, c, d, e)) -> Id i (MkWorkoutSet a b c d e)) sets
+
     workouts = liftIO $ do
       ws <- S.allWorkouts db
       pure [Id i (Workout n) | (i, n) <- ws]
 
 data Config = Config
+
+
+eqOn :: Eq b => (a -> b) -> (a -> a -> Bool)
+eqOn f x y = f x == f y
+
+groupSets = groupBy $ \x y ->
+  eqOn (utctDay . doubleToUtcTime . setDate . values) x y
+
+test = SQ.withConnection "test.db" $ \db -> do
+  sets <- S.setsForWorkout db 2 10
+  pure $ groupSets  $ fmap (\(S.DbSet (i, a, b, c, d, e)) -> Id i (MkWorkoutSet a b c d e)) sets
+
 
 app :: Config -> IO ()
 app config = do
