@@ -10,23 +10,18 @@ module Lib
   )
 where
 
-import Control.Monad
-import Control.Monad.IO.Class
-import Data.Aeson
-import Data.Maybe
-import Data.Proxy
-import Data.Time.Clock
+import Control.Monad.IO.Class (MonadIO(liftIO))
+import Data.Maybe (fromMaybe)
+import Data.Proxy (Proxy(Proxy))
 import qualified Database.SQLite.Simple as SQ
-import DbId
-import GHC.Word
-import Muscle
-import Network.Wai
-import Network.Wai.Handler.Warp
-import PrimaryMuscle
+import DbId (Id(Id))
+import Muscle (Muscle(Muscle))
+import Network.Wai.Handler.Warp (run)
+import PrimaryMuscle (PrimaryMuscle(PrimaryMuscle))
 import qualified Queries.Sqlite as S
 import Servant
-import Workout
-import WorkoutSet
+import Workout (Workout(Workout))
+import WorkoutSet (WorkoutSet(MkWorkoutSet))
 
 type API =
   ("workouts" :> Get '[JSON] [Id Workout])
@@ -36,7 +31,7 @@ type API =
     :<|> ("sets" :> ReqBody '[JSON] WorkoutSet :> Post '[JSON] (Id WorkoutSet))
     :<|> Raw
 
-data Env = Env {db :: SQ.Connection}
+newtype Env = Env {db :: SQ.Connection}
 
 server :: Env -> Server API
 server (Env db) = workouts :<|> getMuscles :<|> getPrimaryMuscles :<|> getSets :<|> postSets :<|> static
@@ -52,7 +47,7 @@ server (Env db) = workouts :<|> getMuscles :<|> getPrimaryMuscles :<|> getSets :
       pure [PrimaryMuscle a b | (a, b) <- primaryMuscles]
 
     getSets mweeks = do
-      let weeks = maybe 0 Prelude.id mweeks
+      let weeks = fromMaybe 0 mweeks
       setsPerWeek <- liftIO $ S.previousSets (S.Weeks weeks) db
       pure $ fmap (\set -> [Id i (MkWorkoutSet a b c d e) | (i, a, b, c, d, e) <- set]) setsPerWeek
 
@@ -64,7 +59,7 @@ server (Env db) = workouts :<|> getMuscles :<|> getPrimaryMuscles :<|> getSets :
 
     workouts = liftIO $ do
       ws <- S.allWorkouts db
-      pure [(Id i (Workout n)) | (i, n) <- ws]
+      pure [Id i (Workout n) | (i, n) <- ws]
 
 data Config = Config
 

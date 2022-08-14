@@ -6,7 +6,7 @@ module Queries.Sqlite where
 import Data.Fixed
 import Data.Text (Text)
 import qualified Data.Text as Text
-import Data.Time.Calendar (Day, addDays, dayOfWeek)
+import Data.Time.Calendar (Day, addDays, dayOfWeek, DayOfWeek(Sunday))
 import Data.Time.Clock (UTCTime (..), getCurrentTime, nominalDiffTimeToSeconds)
 import Data.Time.Clock.POSIX (utcTimeToPOSIXSeconds)
 import Data.Traversable
@@ -46,9 +46,11 @@ utcTimeToDouble t =
 
 previousSunday :: UTCTime -> UTCTime
 previousSunday today =
-  let diff = case daysSinceSunday (utctDay today) of
-        0 -> 7
-        n -> n
+  let diff = case dayOfWeek (utctDay today) of
+        Sunday -> case utctDayTime today of
+          0 -> 7
+          _ -> 0
+        _ -> daysSinceSunday (utctDay today)
    in UTCTime (addDays (fromIntegral $ negate diff) (utctDay today)) 0
 
 previousSets :: Weeks -> Connection -> IO [[(Int, Int, Int, Double, Int, Int)]]

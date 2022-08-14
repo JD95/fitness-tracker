@@ -1,1 +1,3 @@
 *.db
+server/dist*
+server/cabal.project.local
