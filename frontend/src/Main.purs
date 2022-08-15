@@ -2,12 +2,13 @@ module Main where
 
 import Prelude
   (Unit, Void, bind, const, discard,
-   identity, join, map, negate,
+   identity, join, map, negate, flip,
    pure, show, unit, ($), (*), (+),
    (/), (<$>), (<>), (=<<), (/=),
    (==), (>>=), (<<<))
 
-import Data.Newtype (over)
+import Data.Traversable
+import Data.Newtype (un)
 import Data.List as List
 import Control.Monad.Maybe.Trans (MaybeT(..), runMaybeT)
 import Control.Monad.Trans.Class (lift)
@@ -18,15 +19,14 @@ import Data.Array as Array
 import Data.DateTime (DateTime, date, day)
 import Data.DateTime (adjust) as DateTime
 import Data.DateTime.Instant (instant, unInstant) as Date
-import Data.Either (Either(..), either)
-import Data.Foldable (foldr, intercalate)
+import Data.Either (either)
 import Data.Formatter.DateTime
   (format, FormatterCommand(DayOfMonthTwoDigits, Placeholder,
                             MonthTwoDigits, YearFull))
 import Data.JSDate as JSDate
 import Data.List (List)
 import Data.Map as Map
-import Data.Maybe (Maybe(..), maybe)
+import Data.Maybe (Maybe(..), maybe, fromMaybe)
 import Data.Natural (Natural, natToInt)
 import Data.Time.Duration (Minutes(..))
 import Data.Time.Duration as Time
@@ -300,28 +300,36 @@ component =
                   , weight: natToInt weight
                   , intensity: intensity
                   }
-          gather >>= case _ of
-            Just ws -> do
-              postJson ws "/sets" >>= case _ of
-                Right (Id newSet) -> H.modify_ $ updateFull $
-                    updateFitnessInfo $ over FitnessInfo $
-                      \info -> info
-                         { sets = Map.insert (WorkoutSetId newSet.id) (Id newSet) info.sets
+          gather >>= traverse_ \ws ->
+              postJson ws "/sets" >>= traverse_ \(Id newSet) -> do
+                H.modify_ $ updateFull $ \(Info info) ->
+                  let (FitnessInfo fitInfo) = info.fitnessInfo
+                  in Info info
+                     { fitnessInfo = FitnessInfo fitInfo
+                         { sets = Map.insert (WorkoutSetId newSet.id) (Id newSet) fitInfo.sets
                          , setsForWeek
-                             = maybe info.setsForWeek identity
-                             $ Array.modifyAt 0 (Array.cons (Id newSet)) info.setsForWeek
+                             = fromMaybe fitInfo.setsForWeek
+                             $ Array.modifyAt 0 (Array.cons (Id newSet)) fitInfo.setsForWeek
                          }
-                Left _ -> pure unit
-            Nothing -> pure unit
-    WorkoutSelected (WorkoutSelector.Selection w@(WorkoutId wid)) -> do
-      verifySets :: Either String (Array (NonEmptyArray (Id WorkoutSet)))
-        <- getJson ("workout" <> "/" <> show wid <> "/sets")
-      case verifySets of
-        Right sets -> do
-          H.modify_ $ updateFull $ \(Info i) ->
-            Info i { selectedWorkout = Just w
-                   , selectedWorkoutSets = Just sets }
-        Left _ -> pure unit
+                     , selectedWorkoutSets = addSetToTable st.timezoneOffset (Id newSet) <$> info.selectedWorkoutSets
+                     }
+    WorkoutSelected (WorkoutSelector.Selection w) -> do
+      H.modify_ $ updateFull $ \(Info i) -> Info i { selectedWorkout = Just w }
+      fillWorkoutSets w
+
+addSetToTable :: Minutes -> Id WorkoutSet -> Array (NonEmptyArray (Id WorkoutSet)) -> Array (NonEmptyArray (Id WorkoutSet))
+addSetToTable offset newSet arr =
+  case Array.index arr 0 of
+    Just ws ->
+      if workoutSetSameDay offset newSet (NEArray.head ws)
+      then fromMaybe arr (Array.modifyAt 0 (flip NEArray.snoc newSet) arr)
+      else arr
+    Nothing -> arr
+
+fillWorkoutSets (WorkoutId wid) = do
+  getJson ("workout" <> "/" <> show wid <> "/sets") >>= traverse_
+    \sets -> H.modify_ $ updateFull $ \(Info i) ->
+      Info i { selectedWorkoutSets = Just (sets :: Array (NonEmptyArray (Id WorkoutSet))) }
 
 updateFull :: (Info -> Info) -> State -> State
 updateFull f (Full info) = Full (f info)
@@ -385,6 +393,10 @@ sameDay offset x y =
         yDateTime <- unixEpochToDateTime offset y
         pure $ day (date xDateTime) == day (date yDateTime)
   in maybe false identity result
+
+workoutSetSameDay :: Minutes -> Id WorkoutSet -> Id WorkoutSet -> Boolean
+workoutSetSameDay offset (Id x) (Id y) =
+  sameDay offset ((un WorkoutSet x.values).date) ((un WorkoutSet y.values).date)
 
 intensityColor :: Int -> String
 intensityColor 4 = "failSet"

@@ -4,6 +4,7 @@ import Prelude
 import Data.Eq
 import Data.Ord
 import Data.Argonaut (class DecodeJson, class EncodeJson, jsonEmptyObject, decodeJson, (~>), (:=), (.:))
+import Data.Newtype
 
 newtype WorkoutSetId = WorkoutSetId Int
 
@@ -11,12 +12,14 @@ derive newtype instance workoutSetIdEq :: Eq WorkoutSetId
 derive newtype instance workoutSetIdOrd :: Ord WorkoutSetId
 
 newtype WorkoutSet = WorkoutSet
-  { workout :: Int 
+  { workout :: Int
   , reps :: Int
-  , date :: Number 
+  , date :: Number
   , weight :: Int
   , intensity :: Int
   }
+
+derive instance newtypeWorkoutSet :: Newtype WorkoutSet _
 
 instance decodeJsonWorkoutSet :: DecodeJson WorkoutSet where
   decodeJson json = do
