@@ -290,31 +290,25 @@ gatherFieldData (Info st) = runMaybeT $ do
     , intensity: intensity
     }
 
-
 actionInit :: forall output m. MonadAff m => H.HalogenM State Action Slots output m Unit
 actionInit = do
   -- Get Time Info
   today <- H.liftEffect nowDateTime
   offset <- H.liftEffect $ JSDate.getTimezoneOffset =<< JSDate.now
 
-  -- Make API calls for data
-  verifyWorkouts <- getJson "workouts"
-  verifyPrimaryMuscles <- getJson "primary-muscles"
-  verifyMuscles <- getJson "muscles"
-  verifySets <- getJson "sets?weeks=3"
+  H.modify_ <<< const <<< either Error Full =<< runExceptT do
 
-  H.modify_ $ const $ either Error Full $ do
-
-    -- Verify all the data from API is valid
-    workouts <- verifyWorkouts
-    muscles <- verifyMuscles
-    primaryMusclePairs <- verifyPrimaryMuscles
-    sets :: Array (Array (Id WorkoutSet)) <- verifySets
+    -- Make API calls for data
+    workouts <- ExceptT $ getJson "workouts"
+    muscles <- ExceptT $ getJson "primary-muscles"
+    primaryMusclePairs <- ExceptT $ getJson "muscles"
+    sets :: Array (Array (Id WorkoutSet)) <- ExceptT $ getJson "sets?weeks=3"
 
     -- Transform Values
     let primaryMuscles =
           Array.foldr
-          (\(PrimaryMuscle {workout, muscle}) -> Map.insert (WorkoutId workout) (MuscleId muscle))
+          (\(PrimaryMuscle {workout, muscle}) ->
+            Map.insert (WorkoutId workout) (MuscleId muscle))
           Map.empty
           primaryMusclePairs
 
