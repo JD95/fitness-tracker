@@ -301,8 +301,8 @@ actionInit = do
 
     -- Make API calls for data
     workouts <- ExceptT $ getJson "workouts"
-    muscles <- ExceptT $ getJson "primary-muscles"
-    primaryMusclePairs <- ExceptT $ getJson "muscles"
+    primaryMusclePairs <- ExceptT $ getJson "primary-muscles"
+    muscles <- ExceptT $ getJson "muscles"
     sets :: Array (Array (Id WorkoutSet)) <- ExceptT $ getJson "sets?weeks=3"
 
     -- Transform Values
