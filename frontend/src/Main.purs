@@ -7,8 +7,8 @@ import Prelude
    (/), (<$>), (<>), (=<<), (/=),
    (==), (>>=), (<<<))
 
-import Data.Eq
-import Data.Traversable
+import Data.Eq (class Eq)
+import Data.Traversable (foldr, intercalate, traverse_)
 import Data.Newtype (un)
 import Data.List as List
 import Control.Monad.Maybe.Trans (MaybeT(..), runMaybeT)
@@ -34,7 +34,6 @@ import Data.Time.Duration (Minutes(..))
 import Data.Time.Duration as Time
 import Effect (Effect)
 import Effect.Aff.Class (class MonadAff)
-import Effect.Console (log)
 import Effect.Now (now, nowDateTime)
 import Halogen as H
 import Halogen.Aff as HA
@@ -178,17 +177,19 @@ renderSetsGrouped (Info st) =
 
 workoutSetHistory :: forall m. Info -> H.ComponentHTML Action Slots m
 workoutSetHistory (Info st) = HH.div_ $
-  [  let FitnessInfo info = st.fitnessInfo
-         result = do
-           wsets <- st.selectedWorkoutSets
-           pure $ pastSet st.timezoneOffset <<< map (\(Id x) -> x.values) <$> wsets
-    in HH.table_ $ maybe [] identity result
+  [  HH.table_ $
+       maybe [] identity $
+       (map <<< map) (pastSet st.timezoneOffset) $
+       st.selectedWorkoutSets
   ]
 
   where
 
-  pastSet timezoneOffset xs =
-    let (WorkoutSet ws) = NEArray.head xs
+  FitnessInfo info = st.fitnessInfo
+
+  pastSet timezoneOffset sets =
+    let xs = map (_.values <<< un Id) sets
+        (WorkoutSet ws) = NEArray.head xs
         date = displayDate timezoneOffset ws.date
     in setGroup date (NEArray.toArray xs)
 
@@ -262,14 +263,16 @@ actionSubmit = H.get >>= case _ of
       postJson ws "/sets" >>= traverse_ \(Id newSet) -> do
         H.modify_ $ updateFull $ \(Info info) ->
           let (FitnessInfo fitInfo) = info.fitnessInfo
+              sets' =
+                Map.insert (WorkoutSetId newSet.id) (Id newSet) fitInfo.sets
+              setsForWeek' =
+                fromMaybe fitInfo.setsForWeek $ Array.modifyAt 0 (Array.cons (Id newSet)) fitInfo.setsForWeek
+              selectedWorkoutSets' =
+                addSetToTable st.timezoneOffset (Id newSet) <$> info.selectedWorkoutSets
           in Info info
              { fitnessInfo = FitnessInfo fitInfo
-                 { sets = Map.insert (WorkoutSetId newSet.id) (Id newSet) fitInfo.sets
-                 , setsForWeek
-                     = fromMaybe fitInfo.setsForWeek
-                     $ Array.modifyAt 0 (Array.cons (Id newSet)) fitInfo.setsForWeek
-                 }
-             , selectedWorkoutSets = addSetToTable st.timezoneOffset (Id newSet) <$> info.selectedWorkoutSets
+                 { sets = sets', setsForWeek = setsForWeek' }
+             , selectedWorkoutSets = selectedWorkoutSets'
              }
 
 gatherFieldData :: forall output m. MonadAff m => Info -> H.HalogenM State Action Slots output m (Maybe WorkoutSet)
@@ -279,9 +282,7 @@ gatherFieldData (Info st) = runMaybeT $ do
   weight <- MaybeT $ join <$> H.request InputField.natProxy weightSlot InputField.GetValue
   reps <- MaybeT $ join <$> H.request InputField.natProxy repsSlot InputField.GetValue
   intensity <- MaybeT $ H.request RadioInput.proxy intensitySlot RadioInput.GetValue
-
   Time.Milliseconds date <- lift $ Date.unInstant <$> H.liftEffect now
-  lift $ H.liftEffect $ log $ show date
   pure $ WorkoutSet
     { workout: workoutId
     , reps: natToInt reps
@@ -350,23 +351,23 @@ updateFitnessInfo f (Info info) = Info info { fitnessInfo = f info.fitnessInfo }
 
 recommendedWeights :: forall m. Info -> H.ComponentHTML Action Slots m
 recommendedWeights (Info {selectedWorkout, fitnessInfo: FitnessInfo info}) = HH.text $
-  let result = do
-        workoutId <- selectedWorkout
-        Id w <- Map.lookup workoutId info.workouts
-        let matchWorkout = (\(Id {values: WorkoutSet s}) -> s.workout == w.id)
-        Id {values: WorkoutSet x} <- head $ filter matchWorkout $ Array.fromFoldable $ Map.values info.sets
-        pure $ "Weight for Previous Set: " <> show x.weight
-  in maybe "" identity result
+  maybe "" identity $ do
+    workoutId <- selectedWorkout
+    Id w <- Map.lookup workoutId info.workouts
+    let matchWorkout = (\(Id {values: WorkoutSet s}) -> s.workout == w.id)
+    Id {values: WorkoutSet x} <-
+      head $ filter matchWorkout $
+      Array.fromFoldable $
+      Map.values info.sets
+    pure $ "Weight for Previous Set: " <> show x.weight
 
 recommendedRepRange :: forall m. Info -> H.ComponentHTML Action Slots m
-recommendedRepRange (Info {selectedWorkout, fitnessInfo: FitnessInfo info})
-  = HH.text $
-    let result = do
-          workoutId <- selectedWorkout
-          muscleId <- Map.lookup workoutId info.primaryMuscles
-          Id {values: Muscle m} <- Map.lookup muscleId info.muscles
-          pure $ "Recommended Rep Range: (" <> show m.repsMin <> "-" <> show m.repsMax <> ")"
-    in maybe "" identity result
+recommendedRepRange (Info {selectedWorkout, fitnessInfo: FitnessInfo info}) = HH.text $
+  maybe "" identity $ do
+    workoutId <- selectedWorkout
+    muscleId <- Map.lookup workoutId info.primaryMuscles
+    Id {values: Muscle m} <- Map.lookup muscleId info.muscles
+    pure $ "Recommended Rep Range: (" <> show m.repsMin <> "-" <> show m.repsMax <> ")"
 
 dateWriteFormat :: List FormatterCommand
 dateWriteFormat = List.fromFoldable
