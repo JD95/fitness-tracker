@@ -7,10 +7,12 @@ import Prelude
    (/), (<$>), (<>), (=<<), (/=),
    (==), (>>=), (<<<))
 
+import Data.Eq
 import Data.Traversable
 import Data.Newtype (un)
 import Data.List as List
 import Control.Monad.Maybe.Trans (MaybeT(..), runMaybeT)
+import Control.Monad.Except.Trans
 import Control.Monad.Trans.Class (lift)
 import Data.Array (filter, head)
 import Data.Array.NonEmpty (NonEmptyArray)
@@ -84,6 +86,15 @@ data State
   | Full Info
   | Error String
 
+weightSlot :: Int
+weightSlot = 0
+
+repsSlot :: Int
+repsSlot = 1
+
+intensitySlot :: Int
+intensitySlot = 2
+
 component :: forall query input output m. MonadAff m => H.Component query input output m
 component =
   H.mkComponent
@@ -98,12 +109,9 @@ component =
   initialState :: forall a. a -> State
   initialState _ = Empty
 
-  weightSlot = 0
-  repsSlot = 1
-  intensitySlot = 2
-
   render :: State -> H.ComponentHTML Action Slots m
   render Empty = HH.text "No data yet"
+  render (Error e) = HH.text e
   render (Full state@(Info st)) = HH.div [ HH.class_ (ClassName "content") ]
     [ HH.div_
       [ HH.p_
@@ -131,50 +139,13 @@ component =
         [ HH.button [HE.onClick (const Submit)]
           [ HH.text "submit" ]
         ]
-      , renderWorkoutVolume
-      , thisWeeksSetsGrouped
+      , renderWorkoutVolume (Info st)
+      , renderSetsGrouped (Info st) thisWeekSets
       ]
-    , workoutSetHistory
+    , workoutSetHistory (Info st)
     ]
 
     where
-
-    thisWeeksSetsGrouped =
-      HH.table [ HH.class_ (ClassName "pastWorkoutTable") ] $
-        map mkSetGroup $
-        Array.concat $
-        map (Array.groupBy (\(WorkoutSet a) (WorkoutSet b) -> a.workout == b.workout)
-               <<< NEArray.toArray) $
-        Array.groupBy (\(WorkoutSet a) (WorkoutSet b) -> sameDay st.timezoneOffset a.date b.date) $
-        map (\(Id {values: x}) -> x) $
-        thisWeekSets
-
-      where
-
-      FitnessInfo info = st.fitnessInfo
-
-      nameLookup x = do
-        Id {values: Workout w} <- Map.lookup x info.workouts
-        pure w.name
-
-      mkSetGroup sets = setGroup name (NEArray.toArray sets) where
-        WorkoutSet ws = NEArray.head sets
-        name = maybe "Unknown" identity (nameLookup (WorkoutId ws.workout))
-
-    workoutSetHistory = HH.div_ $
-      [  let FitnessInfo info = st.fitnessInfo
-             result = do
-               wsets <- st.selectedWorkoutSets
-               pure $ pastSet st.timezoneOffset <<< map (\(Id x) -> x.values) <$> wsets
-        in HH.table_ $ maybe [] identity result
-      ]
-
-      where
-
-      pastSet timezoneOffset xs =
-        let (WorkoutSet ws) = NEArray.head xs
-            date = displayDate timezoneOffset ws.date
-        in setGroup date (NEArray.toArray xs)
 
     thisWeekSets =
       let (FitnessInfo info) = st.fitnessInfo
@@ -184,138 +155,182 @@ component =
       let (FitnessInfo info) = st.fitnessInfo
       in maybe [] identity (Array.index info.setsForWeek 1)
 
-    renderWorkoutVolume :: H.ComponentHTML Action Slots m
-    renderWorkoutVolume =
-      HH.div_ $
-        map mkHtml $
-        Array.filter (\x -> Array.any ((/=) 0) x.counts) $
-        map mkCounts allKeys
+renderSetsGrouped :: forall m. Info -> Array (Id WorkoutSet) -> H.ComponentHTML Action Slots m
+renderSetsGrouped (Info st) =
+  HH.table [ HH.class_ (ClassName "pastWorkoutTable") ]
+    <<< map mkSetGroup
+    <<< Array.concat
+    <<< map (Array.groupBy (eqOn (_.workout <<< un WorkoutSet)))
+    <<< map (NEArray.toArray <<< map (_.values <<< un Id))
+    <<< Array.groupBy (workoutSetSameDay st.timezoneOffset)
 
-      where
+  where
 
-      mkHtml x = HH.p_ case Array.uncons x.counts of
-          Just {head: c, tail: cs} ->
-            [HH.text $ x.muscle <> ": " <> show c <> " ← " <> intercalate ", " (map show cs)]
-          Nothing -> []
+  FitnessInfo info = st.fitnessInfo
 
-      (FitnessInfo info) = st.fitnessInfo
+  nameLookup x = do
+    Id {values: Workout w} <- Map.lookup x info.workouts
+    pure w.name
 
-      mkCounts m =
-        { muscle: m
-        , counts: map
-            (\vs -> maybe 0 identity (Map.lookup m vs))
-            volumes
+  mkSetGroup sets = setGroup name (NEArray.toArray sets) where
+    WorkoutSet ws = NEArray.head sets
+    name = maybe "Unknown" identity (nameLookup (WorkoutId ws.workout))
+
+workoutSetHistory :: forall m. Info -> H.ComponentHTML Action Slots m
+workoutSetHistory (Info st) = HH.div_ $
+  [  let FitnessInfo info = st.fitnessInfo
+         result = do
+           wsets <- st.selectedWorkoutSets
+           pure $ pastSet st.timezoneOffset <<< map (\(Id x) -> x.values) <$> wsets
+    in HH.table_ $ maybe [] identity result
+  ]
+
+  where
+
+  pastSet timezoneOffset xs =
+    let (WorkoutSet ws) = NEArray.head xs
+        date = displayDate timezoneOffset ws.date
+    in setGroup date (NEArray.toArray xs)
+
+renderWorkoutVolume :: forall m. Info -> H.ComponentHTML Action Slots m
+renderWorkoutVolume (Info st) =
+  HH.div_ $
+    map mkHtml $
+    Array.filter (\x -> Array.any ((/=) 0) x.counts) $
+    map mkCounts allKeys
+
+  where
+
+  mkHtml x = HH.p_ case Array.uncons x.counts of
+      Just {head: c, tail: cs} ->
+        [HH.text $ x.muscle <> ": " <> show c <> " ← " <> intercalate ", " (map show cs)]
+      Nothing -> []
+
+  (FitnessInfo info) = st.fitnessInfo
+
+  mkCounts m =
+    { muscle: m
+    , counts: map
+        (\vs -> maybe 0 identity (Map.lookup m vs))
+        volumes
+    }
+
+  allKeys =
+    Array.fromFoldable
+      $ map (\(Id {values: Muscle m}) -> m.name)
+      $ Map.values info.muscles
+
+  volumes = map (foldr buildCount Map.empty) info.setsForWeek
+
+  buildCount (Id {values: WorkoutSet w}) answer =
+    let (FitnessInfo info) = st.fitnessInfo
+        result = do
+          muscleId <- Map.lookup (WorkoutId w.workout) info.primaryMuscles
+          Id {values: Muscle m} <- Map.lookup muscleId info.muscles
+          pure m.name
+    in Map.alter (Just <<< maybe 1 ((+) 1)) (maybe "unknown" identity result) answer
+
+renderSet :: forall action slots m. Info -> Id WorkoutSet -> H.ComponentHTML action slots m
+renderSet (Info st) (Id {id, values: WorkoutSet ws}) =
+  let FitnessInfo info = st.fitnessInfo
+      result = do
+        Id {values: Workout w} <- Map.lookup (WorkoutId ws.workout) info.workouts
+        pure $
+          [ HH.th_ [ HH.text (displayDate st.timezoneOffset ws.date) ]
+          , HH.th_ [ HH.text w.name ]
+          , HH.th_ [ HH.text $ show ws.reps ]
+          , HH.th_ [ HH.text $ show ws.weight ]
+          , HH.th_ [ HH.text $ show ws.intensity ]
+          ]
+  in HH.tr [ HH.class_ (ClassName $ intensityColor ws.intensity) ]
+       (maybe [HH.th_ [HH.text "fail"]] identity result)
+
+handleAction :: forall output m. MonadAff m => Action -> H.HalogenM State Action Slots output m Unit
+handleAction = case _ of
+  Init -> actionInit
+  Submit -> actionSubmit
+  WorkoutSelected (WorkoutSelector.Selection w) -> do
+    H.modify_ $ updateFull $ \(Info i) -> Info i { selectedWorkout = Just w }
+    fillWorkoutSets w
+
+actionSubmit :: forall output m. MonadAff m => H.HalogenM State Action Slots output m Unit
+actionSubmit = H.get >>= case _ of
+  Empty -> pure unit
+  Error e -> pure unit
+  Full (Info st) -> do
+    gatherFieldData (Info st) >>= traverse_ \ws ->
+      postJson ws "/sets" >>= traverse_ \(Id newSet) -> do
+        H.modify_ $ updateFull $ \(Info info) ->
+          let (FitnessInfo fitInfo) = info.fitnessInfo
+          in Info info
+             { fitnessInfo = FitnessInfo fitInfo
+                 { sets = Map.insert (WorkoutSetId newSet.id) (Id newSet) fitInfo.sets
+                 , setsForWeek
+                     = fromMaybe fitInfo.setsForWeek
+                     $ Array.modifyAt 0 (Array.cons (Id newSet)) fitInfo.setsForWeek
+                 }
+             , selectedWorkoutSets = addSetToTable st.timezoneOffset (Id newSet) <$> info.selectedWorkoutSets
+             }
+
+gatherFieldData :: forall output m. MonadAff m => Info -> H.HalogenM State Action Slots output m (Maybe WorkoutSet)
+gatherFieldData (Info st) = runMaybeT $ do
+  WorkoutId workoutId <- MaybeT $ pure st.selectedWorkout
+  -- Multiple input fields, so we need slots for them
+  weight <- MaybeT $ join <$> H.request InputField.natProxy weightSlot InputField.GetValue
+  reps <- MaybeT $ join <$> H.request InputField.natProxy repsSlot InputField.GetValue
+  intensity <- MaybeT $ H.request RadioInput.proxy intensitySlot RadioInput.GetValue
+
+  Time.Milliseconds date <- lift $ Date.unInstant <$> H.liftEffect now
+  lift $ H.liftEffect $ log $ show date
+  pure $ WorkoutSet
+    { workout: workoutId
+    , reps: natToInt reps
+    , date: date / 1000.0
+    , weight: natToInt weight
+    , intensity: intensity
+    }
+
+
+actionInit :: forall output m. MonadAff m => H.HalogenM State Action Slots output m Unit
+actionInit = do
+  -- Get Time Info
+  today <- H.liftEffect nowDateTime
+  offset <- H.liftEffect $ JSDate.getTimezoneOffset =<< JSDate.now
+
+  -- Make API calls for data
+  verifyWorkouts <- getJson "workouts"
+  verifyPrimaryMuscles <- getJson "primary-muscles"
+  verifyMuscles <- getJson "muscles"
+  verifySets <- getJson "sets?weeks=3"
+
+  H.modify_ $ const $ either Error Full $ do
+
+    -- Verify all the data from API is valid
+    workouts <- verifyWorkouts
+    muscles <- verifyMuscles
+    primaryMusclePairs <- verifyPrimaryMuscles
+    sets :: Array (Array (Id WorkoutSet)) <- verifySets
+
+    -- Transform Values
+    let primaryMuscles =
+          Array.foldr
+          (\(PrimaryMuscle {workout, muscle}) -> Map.insert (WorkoutId workout) (MuscleId muscle))
+          Map.empty
+          primaryMusclePairs
+
+    pure $ Info
+      { fitnessInfo: FitnessInfo
+        { sets: Map.unions (mapFromIds WorkoutSetId <$> sets)
+        , setsForWeek: sets
+        , workouts: mapFromIds WorkoutId workouts
+        , muscles: mapFromIds MuscleId muscles
+        , primaryMuscles: primaryMuscles
         }
-
-      allKeys =
-        Array.fromFoldable
-          $ map (\(Id {values: Muscle m}) -> m.name)
-          $ Map.values info.muscles
-
-      volumes = map (foldr buildCount Map.empty) info.setsForWeek
-
-      buildCount (Id {values: WorkoutSet w}) answer =
-        let (FitnessInfo info) = st.fitnessInfo
-            result = do
-              muscleId <- Map.lookup (WorkoutId w.workout) info.primaryMuscles
-              Id {values: Muscle m} <- Map.lookup muscleId info.muscles
-              pure m.name
-        in Map.alter (Just <<< maybe 1 ((+) 1)) (maybe "unknown" identity result) answer
-
-    renderSet (Id {id, values: WorkoutSet ws}) =
-      let FitnessInfo info = st.fitnessInfo
-          result = do
-            Id {values: Workout w} <- Map.lookup (WorkoutId ws.workout) info.workouts
-            pure $
-              [ HH.th_ [ HH.text (displayDate st.timezoneOffset ws.date) ]
-              , HH.th_ [ HH.text w.name ]
-              , HH.th_ [ HH.text $ show ws.reps ]
-              , HH.th_ [ HH.text $ show ws.weight ]
-              , HH.th_ [ HH.text $ show ws.intensity ]
-              ]
-      in HH.tr [ HH.class_ (ClassName $ intensityColor ws.intensity) ]
-           (maybe [HH.th_ [HH.text "fail"]] identity result)
-
-  render (Error e) = HH.text e
-
-  handleAction :: Action -> H.HalogenM State Action Slots output m Unit
-  handleAction = case _ of
-    Init -> do
-      -- Get Time Info
-      today <- H.liftEffect nowDateTime
-      offset <- H.liftEffect $ JSDate.getTimezoneOffset =<< JSDate.now
-
-      -- Make API calls for data
-      verifyWorkouts <- getJson "workouts"
-      verifyPrimaryMuscles <- getJson "primary-muscles"
-      verifyMuscles <- getJson "muscles"
-      verifySets <- getJson "sets?weeks=3"
-
-      H.modify_ $ const $ either Error Full $ do
-
-        -- Verify all the data from API is valid
-        workouts <- verifyWorkouts
-        muscles <- verifyMuscles
-        primaryMusclePairs <- verifyPrimaryMuscles
-        sets :: Array (Array (Id WorkoutSet)) <- verifySets
-
-        -- Transform Values
-        let primaryMuscles =
-              Array.foldr
-              (\(PrimaryMuscle {workout, muscle}) -> Map.insert (WorkoutId workout) (MuscleId muscle))
-              Map.empty
-              primaryMusclePairs
-
-        pure $ Info
-          { fitnessInfo: FitnessInfo
-            { sets: Map.unions (mapFromIds WorkoutSetId <$> sets)
-            , setsForWeek: sets
-            , workouts: mapFromIds WorkoutId workouts
-            , muscles: mapFromIds MuscleId muscles
-            , primaryMuscles: primaryMuscles
-            }
-          , selectedWorkout: Nothing
-          , selectedWorkoutSets: Nothing
-          , today: maybe today identity $ DateTime.adjust (Minutes $ negate offset) today
-          , timezoneOffset: Minutes $ negate offset
-          }
-    Submit -> do
-      H.get >>= case _ of
-        Empty -> pure unit
-        Error e -> pure unit
-        Full (Info st) -> do
-          let gather = runMaybeT $ do
-                WorkoutId workoutId <- MaybeT $ pure st.selectedWorkout
-                -- Multiple input fields, so we need slots for them
-                weight <- MaybeT $ join <$> H.request InputField.natProxy weightSlot InputField.GetValue
-                reps <- MaybeT $ join <$> H.request InputField.natProxy repsSlot InputField.GetValue
-                intensity <- MaybeT $ H.request RadioInput.proxy intensitySlot RadioInput.GetValue
-
-                Time.Milliseconds date <- lift $ Date.unInstant <$> H.liftEffect now
-                lift $ H.liftEffect $ log $ show date
-                pure $ WorkoutSet
-                  { workout: workoutId
-                  , reps: natToInt reps
-                  , date: date / 1000.0
-                  , weight: natToInt weight
-                  , intensity: intensity
-                  }
-          gather >>= traverse_ \ws ->
-              postJson ws "/sets" >>= traverse_ \(Id newSet) -> do
-                H.modify_ $ updateFull $ \(Info info) ->
-                  let (FitnessInfo fitInfo) = info.fitnessInfo
-                  in Info info
-                     { fitnessInfo = FitnessInfo fitInfo
-                         { sets = Map.insert (WorkoutSetId newSet.id) (Id newSet) fitInfo.sets
-                         , setsForWeek
-                             = fromMaybe fitInfo.setsForWeek
-                             $ Array.modifyAt 0 (Array.cons (Id newSet)) fitInfo.setsForWeek
-                         }
-                     , selectedWorkoutSets = addSetToTable st.timezoneOffset (Id newSet) <$> info.selectedWorkoutSets
-                     }
-    WorkoutSelected (WorkoutSelector.Selection w) -> do
-      H.modify_ $ updateFull $ \(Info i) -> Info i { selectedWorkout = Just w }
-      fillWorkoutSets w
+      , selectedWorkout: Nothing
+      , selectedWorkoutSets: Nothing
+      , today: maybe today identity $ DateTime.adjust (Minutes $ negate offset) today
+      , timezoneOffset: Minutes $ negate offset
+      }
 
 addSetToTable :: Minutes -> Id WorkoutSet -> Array (NonEmptyArray (Id WorkoutSet)) -> Array (NonEmptyArray (Id WorkoutSet))
 addSetToTable offset newSet arr =
@@ -326,6 +341,7 @@ addSetToTable offset newSet arr =
       else arr
     Nothing -> arr
 
+fillWorkoutSets :: forall a b c m. MonadAff m => WorkoutId -> H.HalogenM State a b c m Unit
 fillWorkoutSets (WorkoutId wid) = do
   getJson ("workout" <> "/" <> show wid <> "/sets") >>= traverse_
     \sets -> H.modify_ $ updateFull $ \(Info i) ->
@@ -404,3 +420,6 @@ intensityColor 3 = "hardSet"
 intensityColor 2 = "goodSet"
 intensityColor 1 = "easySet"
 intensityColor _ = "noEffortSet"
+
+eqOn :: forall a b. Eq b => (a -> b) -> (a -> a -> Boolean)
+eqOn f x y = f x == f y
