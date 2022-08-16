@@ -112,7 +112,11 @@ component =
   render Empty = HH.text "No data yet"
   render (Error e) = HH.text e
   render (Full state@(Info st)) = HH.div [ HH.class_ (ClassName "content") ]
-    [ HH.div_
+    [ HH.div [ HH.class_ (ClassName "col") ]
+      [ renderWorkoutVolume (Info st)
+      , renderSetsGrouped (Info st) thisWeekSets
+      ]
+    , HH.div [ HH.class_ (ClassName "col") ]
       [ HH.p_
         [ HH.text "Workout: "
           -- The WorkoutSelector component actually gives output
@@ -138,10 +142,8 @@ component =
         [ HH.button [HE.onClick (const Submit)]
           [ HH.text "submit" ]
         ]
-      , renderWorkoutVolume (Info st)
-      , renderSetsGrouped (Info st) thisWeekSets
+      , workoutSetHistory (Info st)
       ]
-    , workoutSetHistory (Info st)
     ]
 
     where
@@ -332,8 +334,8 @@ addSetToTable offset newSet arr =
   case Array.index arr 0 of
     Just ws ->
       if workoutSetSameDay offset newSet (NEArray.head ws)
-      then fromMaybe arr (Array.modifyAt 0 (flip NEArray.snoc newSet) arr)
-      else arr
+      then fromMaybe arr (Array.modifyAt 0 (NEArray.cons newSet) arr)
+      else Array.cons (NEArray.singleton newSet) arr
     Nothing -> arr
 
 fillWorkoutSets :: forall a b c m. MonadAff m => WorkoutId -> H.HalogenM State a b c m Unit
