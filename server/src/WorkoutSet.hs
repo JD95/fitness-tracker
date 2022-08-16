@@ -5,11 +5,12 @@ module WorkoutSet where
 import Data.Aeson
 import Data.Time.Clock
 import GHC.Generics
+import Time
 
 data WorkoutSet = MkWorkoutSet
   { setWorkout :: Int,
     setReps :: Int,
-    setDate :: Double,
+    setDate :: Time,
     setWeight :: Int,
     setIntensity :: Int
   }

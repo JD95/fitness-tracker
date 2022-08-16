@@ -22,9 +22,22 @@ import Network.Wai.Handler.Warp (run)
 import PrimaryMuscle (PrimaryMuscle(PrimaryMuscle))
 import qualified Queries.Sqlite as S
 import Servant
+    ( Proxy(Proxy),
+      serve,
+      serveDirectoryWebApp,
+      type (:<|>)(..),
+      Capture,
+      JSON,
+      QueryParam,
+      Raw,
+      ReqBody,
+      type (:>),
+      Get,
+      Post,
+      Server )
 import Workout (Workout(Workout))
 import WorkoutSet (WorkoutSet(MkWorkoutSet, setWorkout, setDate))
-import Queries.Sqlite (doubleToUtcTime)
+import Time ( Weeks(Weeks), sameDay )
 
 type API =
   ("workouts" :> Get '[JSON] [Id Workout])
@@ -59,7 +72,7 @@ server (Env db) =
 
     getSets mweeks = do
       let weeks = fromMaybe 0 mweeks
-      setsPerWeek <- liftIO $ S.previousSets (S.Weeks weeks) db
+      setsPerWeek <- liftIO $ S.previousSets (Time.Weeks weeks) db
       pure $ fmap (\set -> [Id i (MkWorkoutSet a b c d e) | (i, a, b, c, d, e) <- set]) setsPerWeek
 
     postSets ws@(MkWorkoutSet workout reps date weight intensity) = do
@@ -83,13 +96,9 @@ data Config = Config
 eqOn :: Eq b => (a -> b) -> (a -> a -> Bool)
 eqOn f x y = f x == f y
 
+groupSets :: [Id WorkoutSet] -> [[Id WorkoutSet]]
 groupSets = groupBy $ \x y ->
-  eqOn (utctDay . doubleToUtcTime . setDate . values) x y
-
-test = SQ.withConnection "test.db" $ \db -> do
-  sets <- S.setsForWorkout db 2 10
-  pure $ groupSets  $ fmap (\(S.DbSet (i, a, b, c, d, e)) -> Id i (MkWorkoutSet a b c d e)) sets
-
+  Time.sameDay (setDate $ values x) (setDate $ values y)
 
 app :: Config -> IO ()
 app config = do

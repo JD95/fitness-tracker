@@ -32,6 +32,7 @@ library
       Muscle
       PrimaryMuscle
       Queries.Sqlite
+      Time
       Workout
       WorkoutSet
   hs-source-dirs:

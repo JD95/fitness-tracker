@@ -2,15 +2,14 @@ module Main where
 
 import Prelude
   (Unit, Void, bind, const, discard,
-   identity, join, map, negate, flip,
-   pure, show, unit, ($), (*), (+),
-   (/), (<$>), (<>), (=<<), (/=),
+   identity, join, map, negate,
+   pure, show, unit, ($), (+),
+   (<$>), (<>), (=<<), (/=),
    (==), (>>=), (<<<))
 
 import Data.Eq (class Eq)
 import Data.Traversable (foldr, intercalate, traverse_)
 import Data.Newtype (un)
-import Data.List as List
 import Control.Monad.Maybe.Trans (MaybeT(..), runMaybeT)
 import Control.Monad.Except.Trans
 import Control.Monad.Trans.Class (lift)
@@ -18,23 +17,17 @@ import Data.Array (filter, head)
 import Data.Array.NonEmpty (NonEmptyArray)
 import Data.Array.NonEmpty as NEArray
 import Data.Array as Array
-import Data.DateTime (DateTime, date, day)
+import Data.DateTime (DateTime)
 import Data.DateTime (adjust) as DateTime
-import Data.DateTime.Instant (instant, unInstant) as Date
 import Data.Either (either)
-import Data.Formatter.DateTime
-  (format, FormatterCommand(DayOfMonthTwoDigits, Placeholder,
-                            MonthTwoDigits, YearFull))
 import Data.JSDate as JSDate
-import Data.List (List)
 import Data.Map as Map
 import Data.Maybe (Maybe(..), maybe, fromMaybe)
 import Data.Natural (Natural, natToInt)
 import Data.Time.Duration (Minutes(..))
-import Data.Time.Duration as Time
 import Effect (Effect)
 import Effect.Aff.Class (class MonadAff)
-import Effect.Now (now, nowDateTime)
+import Effect.Now (nowDateTime)
 import Halogen as H
 import Halogen.Aff as HA
 import Halogen.HTML
@@ -54,6 +47,7 @@ import FitnessInfo
    WorkoutSetId(..), mapFromIds)
 import WorkoutSelector as WorkoutSelector
 import Utils (getJson, postJson)
+import Time (displayDate, getCurrentTime, sameDay) as Time
 
 main :: Effect Unit
 main = HA.runHalogenAff do
@@ -192,7 +186,7 @@ workoutSetHistory (Info st) = HH.div_ $
   pastSet timezoneOffset sets =
     let xs = map (_.values <<< un Id) sets
         (WorkoutSet ws) = NEArray.head xs
-        date = displayDate timezoneOffset ws.date
+        date = Time.displayDate timezoneOffset ws.date
     in setGroup date (NEArray.toArray xs)
 
 renderWorkoutVolume :: forall m. Info -> H.ComponentHTML Action Slots m
@@ -239,7 +233,7 @@ renderSet (Info st) (Id {id, values: WorkoutSet ws}) =
       result = do
         Id {values: Workout w} <- Map.lookup (WorkoutId ws.workout) info.workouts
         pure $
-          [ HH.th_ [ HH.text (displayDate st.timezoneOffset ws.date) ]
+          [ HH.th_ [ HH.text (Time.displayDate st.timezoneOffset ws.date) ]
           , HH.th_ [ HH.text w.name ]
           , HH.th_ [ HH.text $ show ws.reps ]
           , HH.th_ [ HH.text $ show ws.weight ]
@@ -284,11 +278,11 @@ gatherFieldData (Info st) = runMaybeT $ do
   weight <- MaybeT $ join <$> H.request InputField.natProxy weightSlot InputField.GetValue
   reps <- MaybeT $ join <$> H.request InputField.natProxy repsSlot InputField.GetValue
   intensity <- MaybeT $ H.request RadioInput.proxy intensitySlot RadioInput.GetValue
-  Time.Milliseconds date <- lift $ Date.unInstant <$> H.liftEffect now
+  time <- lift $ Time.getCurrentTime
   pure $ WorkoutSet
     { workout: workoutId
     , reps: natToInt reps
-    , date: date / 1000.0
+    , date: time
     , weight: natToInt weight
     , intensity: intensity
     }
@@ -371,26 +365,6 @@ recommendedRepRange (Info {selectedWorkout, fitnessInfo: FitnessInfo info}) = HH
     Id {values: Muscle m} <- Map.lookup muscleId info.muscles
     pure $ "Recommended Rep Range: (" <> show m.repsMin <> "-" <> show m.repsMax <> ")"
 
-dateWriteFormat :: List FormatterCommand
-dateWriteFormat = List.fromFoldable
-  [ DayOfMonthTwoDigits
-  , Placeholder "-"
-  , MonthTwoDigits
-  , Placeholder "-"
-  , YearFull
-  ]
-
-unixEpochToDateTime :: Minutes -> Number -> Maybe DateTime
-unixEpochToDateTime offset date
-  = DateTime.adjust offset
-    =<< JSDate.toDateTime
-    =<< (JSDate.fromInstant <$> Date.instant (Time.Milliseconds (date * 1000.0)))
-
-displayDate :: Minutes -> Number -> String
-displayDate offset date = case unixEpochToDateTime offset date of
-  Just dt -> format dateWriteFormat dt
-  Nothing -> "Failed to parse date"
-
 setGroup :: forall m. String -> Array WorkoutSet -> H.ComponentHTML Action Slots m
 setGroup setTxt sets =
   let toBlock (WorkoutSet ws) =
@@ -399,17 +373,10 @@ setGroup setTxt sets =
       cols = Array.cons (HH.th_ [ HH.text setTxt ]) (toBlock <$> Array.reverse sets)
   in HH.tr_ cols
 
-sameDay :: Minutes -> Number -> Number -> Boolean
-sameDay offset x y =
-  let result = do
-        xDateTime <- unixEpochToDateTime offset x
-        yDateTime <- unixEpochToDateTime offset y
-        pure $ day (date xDateTime) == day (date yDateTime)
-  in maybe false identity result
 
 workoutSetSameDay :: Minutes -> Id WorkoutSet -> Id WorkoutSet -> Boolean
 workoutSetSameDay offset (Id x) (Id y) =
-  sameDay offset ((un WorkoutSet x.values).date) ((un WorkoutSet y.values).date)
+  Time.sameDay offset ((un WorkoutSet x.values).date) ((un WorkoutSet y.values).date)
 
 intensityColor :: Int -> String
 intensityColor 4 = "failSet"

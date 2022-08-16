@@ -7,12 +7,12 @@ module FitnessInfo
 )
 where
 
-import Data.Newtype
-import WorkoutSet
-import Workout
-import Muscle
+import Data.Newtype (class Newtype)
+import WorkoutSet (WorkoutSet(..), WorkoutSetId(..))
+import Workout (Workout(..), WorkoutId(..))
+import Muscle (Muscle(..), MuscleId(..))
 import Data.Map (Map)
-import DbId
+import DbId (Id(..), mapFromIds)
 
 newtype FitnessInfo
   = FitnessInfo

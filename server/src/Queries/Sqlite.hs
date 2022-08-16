@@ -6,20 +6,17 @@
 
 module Queries.Sqlite where
 
-import Data.Fixed
 import Data.Text (Text)
 import qualified Data.Text as Text
-import Data.Time.Calendar (Day, addDays, dayOfWeek, DayOfWeek(Sunday))
-import Data.Time.Clock (UTCTime (..), getCurrentTime, nominalDiffTimeToSeconds, secondsToNominalDiffTime)
-import Data.Time.Clock.POSIX (utcTimeToPOSIXSeconds, posixSecondsToUTCTime)
 import Data.Traversable
 import Database.SQLite.Simple
 import Database.SQLite.Simple.FromRow
 import Database.SQLite.Simple.QQ
 import Database.SQLite.Simple.Time
 import GHC.Int (Int64)
+import Time
 
-insertSet :: Connection -> (Int, Int, Double, Int, Int) -> IO ()
+insertSet :: Connection -> (Int, Int, Time, Int, Int) -> IO ()
 insertSet conn (setWorkout, setReps, setDate, setWeight, setIntensity) = do
   execute
     conn
@@ -29,7 +26,7 @@ insertSet conn (setWorkout, setReps, setDate, setWeight, setIntensity) = do
     |]
     (setWorkout, setReps, setDate, setWeight, setIntensity)
 
-allWorkoutSets :: Connection -> IO [(Int, Int, Int, Double, Int, Int)]
+allWorkoutSets :: Connection -> IO [(Int, Int, Int, Time, Int, Int)]
 allWorkoutSets conn =
   query_
     conn
@@ -37,45 +34,16 @@ allWorkoutSets conn =
         select * from workout_set order by date desc
     |]
 
-newtype Weeks = Weeks Int
-  deriving (Eq, Ord, Show)
-
-daysSinceSunday :: Day -> Int
-daysSinceSunday = fromEnum . dayOfWeek
-
-utcTimeToDouble :: UTCTime -> Double
-utcTimeToDouble t =
-  let (MkFixed nWeeksAgoPico) = nominalDiffTimeToSeconds $ utcTimeToPOSIXSeconds t
-   in (fromIntegral nWeeksAgoPico :: Double) / (10.0 ^ 12)
-
-
-doubleToUtcTime ::  Double -> UTCTime
-doubleToUtcTime t =
-  posixSecondsToUTCTime
-    . secondsToNominalDiffTime
-    . fromIntegral
-    . floor
-    $ t
-
-previousSunday :: UTCTime -> UTCTime
-previousSunday today =
-  let diff = case dayOfWeek (utctDay today) of
-        Sunday -> case utctDayTime today of
-          0 -> 7
-          _ -> 0
-        _ -> daysSinceSunday (utctDay today)
-   in UTCTime (addDays (fromIntegral $ negate diff) (utctDay today)) 0
-
-newtype DbSet = DbSet (Int, Int, Int, Double, Int, Int)
+newtype DbSet = DbSet (Int, Int, Int, Time, Int, Int)
   deriving Show
 
 instance FromRow DbSet where
   fromRow = DbSet <$> fromRow
 
-previousSets :: Weeks -> Connection -> IO [[(Int, Int, Int, Double, Int, Int)]]
+previousSets :: Weeks -> Connection -> IO [[(Int, Int, Int, Time, Int, Int)]]
 previousSets (Weeks w) conn = do
   now <- getCurrentTime
-  let days = utcTimeToDouble <$> iterate previousSunday now
+  let days = previousSundays now
   let weekRanges = take (w + 1) $ zip (tail days) days
   for weekRanges $
     query
@@ -135,8 +103,7 @@ insertWorkout conn val =
 setsForWorkout :: Connection -> Int -> Int -> IO [DbSet]
 setsForWorkout conn workout weeksBack = do
   now <- getCurrentTime
-  let start :: Double
-      start = utcTimeToDouble $ iterate previousSunday now !! weeksBack
+  let start = previousSundays now !! weeksBack
   query
     conn
     [sql|

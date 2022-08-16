@@ -1,10 +1,9 @@
 module WorkoutSet where
 
-import Prelude
-import Data.Eq
-import Data.Ord
+import Prelude (class Eq, class Ord, bind, pure, ($))
 import Data.Argonaut (class DecodeJson, class EncodeJson, jsonEmptyObject, decodeJson, (~>), (:=), (.:))
-import Data.Newtype
+import Data.Newtype (class Newtype)
+import Time (Time)
 
 newtype WorkoutSetId = WorkoutSetId Int
 
@@ -14,7 +13,7 @@ derive newtype instance workoutSetIdOrd :: Ord WorkoutSetId
 newtype WorkoutSet = WorkoutSet
   { workout :: Int
   , reps :: Int
-  , date :: Number
+  , date :: Time
   , weight :: Int
   , intensity :: Int
   }
