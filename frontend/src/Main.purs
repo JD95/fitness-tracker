@@ -325,12 +325,13 @@ actionInit = do
 
 addSetToTable :: Minutes -> Id WorkoutSet -> Array (NonEmptyArray (Id WorkoutSet)) -> Array (NonEmptyArray (Id WorkoutSet))
 addSetToTable offset newSet arr =
-  case Array.index arr 0 of
+  let newRow = Array.cons (NEArray.singleton newSet) arr
+  in case Array.index arr 0 of
     Just ws ->
       if workoutSetSameDay offset newSet (NEArray.head ws)
-      then fromMaybe arr (Array.modifyAt 0 (NEArray.cons newSet) arr)
-      else Array.cons (NEArray.singleton newSet) arr
-    Nothing -> arr
+      then fromMaybe newRow (Array.modifyAt 0 (NEArray.cons newSet) arr)
+      else newRow
+    Nothing -> newRow
 
 fillWorkoutSets :: forall a b c m. MonadAff m => WorkoutId -> H.HalogenM State a b c m Unit
 fillWorkoutSets (WorkoutId wid) = do
