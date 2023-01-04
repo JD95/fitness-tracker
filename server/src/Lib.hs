@@ -92,7 +92,6 @@ server (Env db) =
 
 data Config = Config
 
-
 eqOn :: Eq b => (a -> b) -> (a -> a -> Bool)
 eqOn f x y = f x == f y
 
@@ -102,6 +101,7 @@ groupSets = groupBy $ \x y ->
 
 app :: Config -> IO ()
 app config = do
+  putStrLn "Starting fitness tracker on port 8081"
   SQ.withConnection "test.db" $ \conn -> do
     SQ.setTrace conn $ Just print
     run 8081 (serve (Proxy @API) (server $ Env conn))

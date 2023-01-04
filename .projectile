@@ -1,3 +1,5 @@
 - frontend/.spago
 - frontend/output
-- server/.stack-work
+- server/dist-newstyle
+- *undo-tree~
+- cache-hash

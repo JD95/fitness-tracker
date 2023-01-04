@@ -1,3 +1,6 @@
 *.db
 server/dist*
 server/cabal.project.local
+cache-hash
+*undo-tree~
+cache-hash
