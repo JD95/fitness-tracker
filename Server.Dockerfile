@@ -23,9 +23,15 @@ RUN cabal install --installdir="/" --install-method=copy
 # Server Stage #
 ################
 
-FROM builder as production
+FROM frolvlad/alpine-glibc:latest as production
 
 WORKDIR /
+
+# Sqlite
+
+RUN apk add sqlite sqlite-dev gmp
+
+# Frontend
 
 RUN mkdir /server
 RUN mkdir /frontend
@@ -42,6 +48,4 @@ COPY frontend/style.css \
 COPY --from=builder /fitness-tracker \
      /server/fitness-tracker
 
-RUN rm -r /source
-
-CMD ["sh"]
+CMD ["./server/fitness-tracker"]

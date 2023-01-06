@@ -1,16 +1,4 @@
-################
-# Sqlite Stage #
-################
-
-FROM haskell:8.10.7 as sqlite
-
-WORKDIR /
-
-RUN apt-get -y update
-RUN apt-get -y upgrade
-RUN apt-get install -y sqlite3 libsqlite3-dev
-
-FROM sqlite
+FROM haskell:8.10.7
 
 # Setup dirs
 
