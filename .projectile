@@ -2,4 +2,4 @@
 - frontend/output
 - server/dist-newstyle
 - *undo-tree~
-- cache-hash
+- cache

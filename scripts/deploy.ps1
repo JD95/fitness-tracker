@@ -54,6 +54,14 @@ Try {
   Generate-Kubernetes-Yaml -Config "deployment"
   Generate-Kubernetes-Yaml -Config "service"
 
+  Write-Host "`n[Tearing down active deployments]"
+  if ("$(kubectl get deployments)".Contains("fitness-tracker-deployment")) {
+    Exec { kubectl delete deployment fitness-tracker-deployment }
+  }
+  if ("$(kubectl get services)".Contains("fitness-tracker-service")) {
+    Exec { kubectl delete service fitness-tracker-service }
+  }
+
   Write-Host "`n[Applying deployment configuration]"
   Exec { kubectl apply -f kubernetes/deployment.yaml }
 
