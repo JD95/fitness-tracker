@@ -18,12 +18,6 @@ let service =
             , port = 8081
             , targetPort = Some (NatOrString.Nat 8081)
             }
-          , kubernetes.ServicePort::{
-            , protocol = Some "TCP"
-            , name = Some "keycloak"
-            , port = 8082
-            , targetPort = Some (NatOrString.Nat 8082)
-            }
           ]
         }
       }

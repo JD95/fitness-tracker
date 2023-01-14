@@ -1,0 +1,21 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: fitness-tracker-deployment
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: fitness-tracker-deployment
+  template:
+    metadata:
+      labels:
+        app: fitness-tracker-deployment
+      name: fitness-tracker-deployment
+    spec:
+      containers:
+        - image: fitness-tracker:latest
+          imagePullPolicy: IfNotPresent
+          name: fitness-tracker
+          ports:
+            - containerPort: 8081

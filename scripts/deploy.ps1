@@ -13,12 +13,12 @@ function Exec
 {
     [CmdletBinding()]
     param(
-        [Parameter(Position=0,Mandatory=1)][scriptblock]$cmd,
-        [Parameter(Position=1,Mandatory=0)][string]$errorMessage = ("Error executing command {0}" -f $cmd)
+        [Parameter(Position=0,Mandatory=1)][scriptblock]$Cmd,
+        [Parameter(Position=1,Mandatory=0)][string]$ErrorMessage = ("Error executing command {0}" -f $Cmd)
     )
-    & $cmd
+    & $Cmd
     if ($lastexitcode -ne 0) {
-        throw ("Exec: " + $errorMessage)
+        throw ("Exec: " + $ErrorMessage)
     }
 }
 
@@ -27,46 +27,62 @@ function Generate-Kubernetes-Yaml {
     [string]$Config
   )
   if (
-    (Test-path -Path cache/kubernetes/$Config.hash) -and
+    (Test-path -Path "cache/kubernetes/$Config.hash") -and
     ("$(Exec { dhall hash --file kubernetes/$Config.dhall })" -eq "$(Get-Content -Path cache/kubernetes/$Config.hash)")
     ) {
 
     Write-Host "- $Config configuration is up to date!" -ForegroundColor Green
+    return $false
 
   } else {
 
     Write-Host "- $Config configuration has changed, updating..." -ForegroundColor Yellow
-    Exec { dhall resolve --file kubernetes/$Config.dhall | dhall normalize | dhall-to-yaml | Set-Content -Path kubernetes/$Config.yaml }
-    Out-File -FilePath ./cache/kubernetes/$Config.hash -InputObject "$(Exec { dhall hash --file kubernetes/$Config.dhall })"
+    Exec { dhall resolve --file "kubernetes/$Config.dhall" | dhall normalize | dhall-to-yaml | Set-Content -Path "kubernetes/$Config.yaml" }
+    Out-File -FilePath "./cache/kubernetes/$Config.hash" -InputObject "$(Exec { dhall hash --file kubernetes/$Config.dhall })"
     Write-Host "- $Config configuration is now up to date!" -ForegroundColor Green
+    return $true
 
   }
 }
 
+function Sync-Pod {
+  param (
+    [string]$PodName
+  )
+
+  if (!(Test-Path -Path "cache/kubernetes/$PodName")) {
+    Write-Host "- Creating cache folder for $Podname"
+    New-Item -ItemType Directory -Path "cache/kubernetes/$Podname"
+  }
+
+  echo "`n[Syncing configuration for $PodName]"
+  if (Generate-Kubernetes-Yaml -Config "$PodName/deployment") {
+    Write-Host "- Deleting existing deployment for $PodName"
+    if ("$(kubectl get deployments)".Contains("$PodName-deployment")) {
+      Exec { kubectl delete deployment "$PodName-deployment" }
+    }
+  }
+  Exec { kubectl apply -f "kubernetes/$PodName/deployment.yaml" }
+
+  if (Generate-Kubernetes-Yaml -Config "$PodName/service") {
+    Write-Host "- Deleting existing service for $PodName"
+    if ("$(kubectl get services)".Contains("$PodName-service")) {
+      Exec { kubectl delete service "$PodName-service" }
+    }
+  }
+  Exec { kubectl apply -f "kubernetes/$PodName/service.yaml" }
+}
+
 Try {
-  echo "`n[Syncing configuration files]"
 
   # Setup Caching
   if (!(Test-Path -Path cache/kubernetes)) {
+    Write-Host "Creating cache for kubernetes"
     New-Item -ItemType Directory -Path cache/kubernetes
   }
 
-  Generate-Kubernetes-Yaml -Config "deployment"
-  Generate-Kubernetes-Yaml -Config "service"
-
-  Write-Host "`n[Tearing down active deployments]"
-  if ("$(kubectl get deployments)".Contains("fitness-tracker-deployment")) {
-    Exec { kubectl delete deployment fitness-tracker-deployment }
-  }
-  if ("$(kubectl get services)".Contains("fitness-tracker-service")) {
-    Exec { kubectl delete service fitness-tracker-service }
-  }
-
-  Write-Host "`n[Applying deployment configuration]"
-  Exec { kubectl apply -f kubernetes/deployment.yaml }
-
-  Write-Host "`n[Applying service configuration]"
-  Exec { kubectl apply -f kubernetes/service.yaml }
+  Sync-Pod "fitness-tracker"
+  Sync-Pod "authentication"
 
 } Catch {
   throw
