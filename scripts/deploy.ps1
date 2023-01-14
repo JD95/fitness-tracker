@@ -39,7 +39,6 @@ function Generate-Kubernetes-Yaml {
     Write-Host "- $Config configuration has changed, updating..." -ForegroundColor Yellow
     Exec { dhall resolve --file "kubernetes/$Config.dhall" | dhall normalize | dhall-to-yaml | Set-Content -Path "kubernetes/$Config.yaml" }
     Out-File -FilePath "./cache/kubernetes/$Config.hash" -InputObject "$(Exec { dhall hash --file kubernetes/$Config.dhall })"
-    Write-Host "- $Config configuration is now up to date!" -ForegroundColor Green
     return $true
 
   }
