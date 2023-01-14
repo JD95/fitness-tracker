@@ -58,16 +58,16 @@ function Sync-Pod {
   echo "`n[Syncing configuration for $PodName]"
   if (Generate-Kubernetes-Yaml -Config "$PodName/deployment") {
     Write-Host "- Deleting existing deployment for $PodName"
-    if ("$(kubectl get deployments)".Contains("$PodName-deployment")) {
-      Exec { kubectl delete deployment "$PodName-deployment" }
+    if ("$(kubectl get deployments)".Contains("$PodName")) {
+      Exec { kubectl delete deployment "$PodName" }
     }
   }
   Exec { kubectl apply -f "kubernetes/$PodName/deployment.yaml" }
 
   if (Generate-Kubernetes-Yaml -Config "$PodName/service") {
     Write-Host "- Deleting existing service for $PodName"
-    if ("$(kubectl get services)".Contains("$PodName-service")) {
-      Exec { kubectl delete service "$PodName-service" }
+    if ("$(kubectl get services)".Contains("$PodName")) {
+      Exec { kubectl delete service "$PodName" }
     }
   }
   Exec { kubectl apply -f "kubernetes/$PodName/service.yaml" }

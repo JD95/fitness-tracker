@@ -4,4 +4,4 @@ server/cabal.project.local
 *undo-tree~
 cache
 *.history
-kubernetes/*.yaml
+kubernetes/**/*.yaml

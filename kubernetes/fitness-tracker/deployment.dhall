@@ -1,6 +1,6 @@
 let kubernetes = (../prelude.dhall).kubernetes
 
-let deploymentLabel = toMap { app = "fitness-tracker-deployment" }
+let deploymentLabel = toMap { app = "fitness-tracker" }
 
 let serverContainer =
       kubernetes.Container::{
@@ -12,9 +12,7 @@ let serverContainer =
 
 let deployment =
       kubernetes.Deployment::{
-      , metadata = kubernetes.ObjectMeta::{
-        , name = Some "fitness-tracker-deployment"
-        }
+      , metadata = kubernetes.ObjectMeta::{ name = Some "fitness-tracker" }
       , spec = Some kubernetes.DeploymentSpec::{
         , selector = kubernetes.LabelSelector::{
           , matchLabels = Some deploymentLabel
@@ -22,7 +20,7 @@ let deployment =
         , replicas = Some 1
         , template = kubernetes.PodTemplateSpec::{
           , metadata = Some kubernetes.ObjectMeta::{
-            , name = Some "fitness-tracker-deployment"
+            , name = Some "fitness-tracker"
             , labels = Some deploymentLabel
             }
           , spec = Some kubernetes.PodSpec::{ containers = [ serverContainer ] }

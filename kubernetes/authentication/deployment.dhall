@@ -14,14 +14,12 @@ let keycloakContainer =
           , value = Some "admin"
           }
         ]
-      , command = Some [ "start-dev" ]
+      , args = Some [ "start-dev" ]
       }
 
 let deployment =
       kubernetes.Deployment::{
-      , metadata = kubernetes.ObjectMeta::{
-        , name = Some "authentication-deployment"
-        }
+      , metadata = kubernetes.ObjectMeta::{ name = Some "authentication" }
       , spec = Some kubernetes.DeploymentSpec::{
         , selector = kubernetes.LabelSelector::{
           , matchLabels = Some deploymentLabel
@@ -29,7 +27,7 @@ let deployment =
         , replicas = Some 1
         , template = kubernetes.PodTemplateSpec::{
           , metadata = Some kubernetes.ObjectMeta::{
-            , name = Some "authentication-deployment"
+            , name = Some "authentication"
             , labels = Some deploymentLabel
             }
           , spec = Some kubernetes.PodSpec::{

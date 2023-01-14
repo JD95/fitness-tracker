@@ -5,10 +5,12 @@ let NatOrString = kubernetes.NatOrString
 let service =
       kubernetes.Service::{
       , metadata = kubernetes.ObjectMeta::{
-        , name = Some "authentication-service"
+        , name = Some "authentication"
+        , labels = Some (toMap { app = "authentication" })
         }
       , spec = Some kubernetes.ServiceSpec::{
         , type = Some "NodePort"
+        , selector = Some (toMap { app = "authentication" })
         , ports = Some
           [ kubernetes.ServicePort::{
             , protocol = Some "TCP"
