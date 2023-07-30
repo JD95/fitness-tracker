@@ -3,7 +3,7 @@
 
   inputs = {
     nixpkgs.url = "github:NixOS/nixpkgs/nixos-unstable";
-    backend.url = "path:server/";
+    backend.url = "path:./server/";
     frontend.url = "path:./frontend/";
     flake-utils.url = "github:numtide/flake-utils";
   };
@@ -16,10 +16,10 @@
       packages.default = nixpkgs.stdenv.mkDerivation {
         name = "fitness-tracker";
 
-        #src = nixpkgs.nix-gitignore.gitignoreSource [ ".git" ] ./frontend;
+        # src = ./server/flake.nix ./frontend/flake.nix;
         buildInputs = [ 
-          backend.packages.${system}.default 
-          frontend.packages.${system}.default 
+          backend.packages.${system}.default
+          frontend.packages.${system}.default
         ];
         unpackPhase = ''
           cp -r $backend .

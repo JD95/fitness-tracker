@@ -20,12 +20,12 @@
     {
       packages.default = nixpkgs.stdenv.mkDerivation {
         name = "fitness-tracker-frontend";
-        src = nixpkgs.nix-gitignore.gitignoreSource [ ".git" ] ./frontend;
+        src = nixpkgs.nix-gitignore.gitignoreSource [ ".git" ] ./.;
         nativeBuildInputs = [
             easy-purescript-nix.purs-0_14_0
         ] ++ (
           spago2nix.packages.${system}.spago2nix_nativeBuildInputs {
-            srcs-dhall = [./frontend/spago.dhall ./frontend/packages.dhall];
+            srcs-dhall = [./spago.dhall ./packages.dhall];
           }
         );
         unpackPhase = ''

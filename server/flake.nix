@@ -15,7 +15,7 @@
       backend-project = devTools:
        let addBuildTools = (trivial.flip haskell-lib.addBuildTools) devTools;
        in nixpkgs.haskellPackages.developPackage {
-         root = nixpkgs.lib.sourceFilesBySuffices ./server [ ".cabal" ".hs" ".nix" ];
+         root = nixpkgs.lib.sourceFilesBySuffices ./. [ ".cabal" ".hs" ".nix" ];
          name = "fitness-server-backend";
          returnShellEnv = !(devTools == [ ]);
          modifier = (trivial.flip trivial.pipe) [
